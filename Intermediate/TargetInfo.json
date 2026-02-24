@@ -1,0 +1,14 @@
+{
+	"Targets": [
+		{
+			"Name": "ForestSimulator",
+			"Path": "..\\Source\\ForestSimulator.Target.cs",
+			"Type": "Game"
+		},
+		{
+			"Name": "ForestSimulatorEditor",
+			"Path": "..\\Source\\ForestSimulatorEditor.Target.cs",
+			"Type": "Editor"
+		}
+	]
+}

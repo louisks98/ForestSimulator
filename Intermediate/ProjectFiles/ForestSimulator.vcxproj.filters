@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <None Include="..\..\ForestSimulator.uproject" />
+    <Filter Include="Source">
+      <UniqueIdentifier>{F31BBDD1-B3E8-3BCC-9652-680E16935819}</UniqueIdentifier>
+    </Filter>
+    <None Include="..\..\Source\ForestSimulator.Target.cs">
+      <Filter>Source</Filter>
+    </None>
+    <None Include="..\..\Source\ForestSimulatorEditor.Target.cs">
+      <Filter>Source</Filter>
+    </None>
+    <None Include="..\..\forest_fire_simulator_context.md" />
+    <Filter Include="Config">
+      <UniqueIdentifier>{FA535FFB-25E1-3D20-B416-52F9BE21E06E}</UniqueIdentifier>
+    </Filter>
+    <None Include="..\..\Config\DefaultEditor.ini">
+      <Filter>Config</Filter>
+    </None>
+    <None Include="..\..\Config\DefaultEngine.ini">
+      <Filter>Config</Filter>
+    </None>
+    <None Include="..\..\Config\DefaultGame.ini">
+      <Filter>Config</Filter>
+    </None>
+    <None Include="..\..\Config\DefaultInput.ini">
+      <Filter>Config</Filter>
+    </None>
+    <Filter Include="Source\ForestSimulator">
+      <UniqueIdentifier>{25DBFD67-4F68-3FF0-9D5B-B208CAFD0973}</UniqueIdentifier>
+    </Filter>
+    <None Include="..\..\Source\ForestSimulator\ForestSimulator.Build.cs">
+      <Filter>Source\ForestSimulator</Filter>
+    </None>
+    <ClCompile Include="..\..\Source\ForestSimulator\ForestSimulator.cpp">
+      <Filter>Source\ForestSimulator</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\ForestSimulator\ForestSimulator.h">
+      <Filter>Source\ForestSimulator</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\ForestSimulator\Tree.cpp">
+      <Filter>Source\ForestSimulator</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\ForestSimulator\Tree.h">
+      <Filter>Source\ForestSimulator</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
