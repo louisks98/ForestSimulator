@@ -2,7 +2,7 @@
 
 ## Project Goal
 
-Build a **forest fire simulator in Unreal Engine 5**, grounded in two academic papers on physically-based wildfire and wood combustion simulation. The simulator should model individual tree combustion and fire propagation across a forest at interactive rates.
+Help build a **forest fire simulator in Unreal Engine 5**, grounded in two academic papers on physically-based wildfire and wood combustion simulation. The simulator should model individual tree combustion and fire propagation across a forest at interactive rates.
 
 ---
 
