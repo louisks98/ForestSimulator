@@ -28,6 +28,10 @@
 		{
 			"Name": "GeoReferencing",
 			"Enabled": true
+		},
+		{
+			"Name": "ImpostorBaker",
+			"Enabled": true
 		}
 	]
 }

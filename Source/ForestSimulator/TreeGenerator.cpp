@@ -4,7 +4,12 @@
 
 void UTreeGenerator::GenerateTreeStructure(UTreePropertiesDataAsset* TreePropertiesData, UTreeStructureDataAsset* TreeStructureData)
 {
-	 FTurtleFrame TurtleFrame;
+	TreeStructureData->Edges.Empty();
+	TreeStructureData->Nodes.Empty();
+	TreeStructureData->Leaves.Empty();
+	TreeStructureData->Modules.Empty();
+	
+	FTurtleFrame TurtleFrame;
 	TurtleFrame.Position = FVector::ZeroVector;
 	TurtleFrame.Frame = FQuat::Identity;
 	FBranchModule BranchModule;
@@ -98,7 +103,7 @@ void UTreeGenerator::GenerateStructure(FRandomStream& RandomStream, UTreePropert
 				
 				int j = i - 1;
 				Pitch = FQuat(TurtleFrame.Frame.GetRightVector(), FMath::DegreesToRadians(TreeData->BranchAngle + TreeData->BranchAngle * RandomStream.FRandRange(0.1f, 0.2f)));
-				Yaw = FQuat(TurtleFrame.Frame.GetUpVector(), FMath::DegreesToRadians(j * (360.0f / TreeData->BranchCount - 1)));
+				Yaw = FQuat(TurtleFrame.Frame.GetUpVector(), FMath::DegreesToRadians(j * (360.0f / (TreeData->BranchCount - 1))));
 				Roll = FQuat(TurtleFrame.Frame.GetForwardVector(), FMath::DegreesToRadians(j * TreeData->PhyllotaxisAngle));
 			}
 		}
