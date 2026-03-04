@@ -8,12 +8,6 @@
 class USkeletalMesh;
 class UTreeStructureDataAsset;
 
-struct FTurtleFrame
-{
-	FVector Position;
-	FQuat Frame;
-};
-
 UCLASS()
 class FORESTSIMULATOR_API UTreeGenerator : public UBlueprintFunctionLibrary
 {
@@ -25,5 +19,7 @@ public:
 	static void GenerateTreeStructure(UTreePropertiesDataAsset* TreePropertiesData, UTreeStructureDataAsset* TreeStructureData);
 
 private:
-	static void GenerateStructure(FRandomStream& RandomStream, UTreePropertiesDataAsset* TreeData, UTreeStructureDataAsset* TreeStructure, FTurtleFrame TurtleFrame, float BranchRadius, int ModuleIndex, int PreviousNodeIndex);
+	static void GenerateStructure(FRandomStream& RandomStream, UTreePropertiesDataAsset* TreeData, UTreeStructureDataAsset* TreeStructure);
+	static void GenerateNodes(UTreePropertiesDataAsset* TreeData, UTreeStructureDataAsset* TreeStructure, TArray<FVector>& AttractionPoints);
+	static void GenerateAttractionPoints(FRandomStream& RandomStream, UTreePropertiesDataAsset* TreeData, TArray<FVector>& AttractionPoints);
 };

@@ -1,4 +1,5 @@
 #include "TreeGenerator.h"
+
 #include "TreeStructureDataAsset.h"
 #include "TreePropertiesDataAsset.h"
 
@@ -9,110 +10,139 @@ void UTreeGenerator::GenerateTreeStructure(UTreePropertiesDataAsset* TreePropert
 	TreeStructureData->Leaves.Empty();
 	TreeStructureData->Modules.Empty();
 	
-	FTurtleFrame TurtleFrame;
-	TurtleFrame.Position = FVector::ZeroVector;
-	TurtleFrame.Frame = FQuat::Identity;
-	FBranchModule BranchModule;
-	TreeStructureData->Modules.Add(BranchModule);
-	FTreeNode StartTreeNode;
-	StartTreeNode.Position = TurtleFrame.Position;
-	StartTreeNode.Orientation = TurtleFrame.Frame;
-	StartTreeNode.Radius = TreePropertiesData->TrunkRadius;
-	TreeStructureData->Nodes.Add(StartTreeNode);
-
 	FRandomStream Random{TreePropertiesData->RandomSeed};
 	
-	GenerateStructure(Random, TreePropertiesData, TreeStructureData, TurtleFrame, TreePropertiesData->TrunkRadius, 0, 0);
+	GenerateStructure(Random, TreePropertiesData, TreeStructureData);
 }
 
-void UTreeGenerator::GenerateStructure(FRandomStream& RandomStream, UTreePropertiesDataAsset* TreeData, UTreeStructureDataAsset* TreeStructure,
-	FTurtleFrame TurtleFrame, float BranchRadius, int ModuleIndex, int PreviousNodeIndex)
+void UTreeGenerator::GenerateStructure(FRandomStream& RandomStream, UTreePropertiesDataAsset* TreeData, UTreeStructureDataAsset* TreeStructure)
 {
-	FVector Axis = FVector::CrossProduct(TurtleFrame.Frame.GetUpVector(), FVector::DownVector);
-	if (!Axis.IsNearlyZero())
-	{
-		FQuat Rotation = FQuat(Axis.GetSafeNormal(), FMath::DegreesToRadians(TreeData->TropismStrength * RandomStream.FRandRange(0.85f, 1.15f)));
-		TurtleFrame.Frame = Rotation * TurtleFrame.Frame;
-	}
-	
-	float Length = BranchRadius * TreeData->SegmentLengthFactor * RandomStream.FRandRange(0.85f, 1.15f);
-	FTreeNode EndTreeNode;
-	TurtleFrame.Position = TurtleFrame.Position + TurtleFrame.Frame.GetUpVector() * Length;
-	EndTreeNode.Position = TurtleFrame.Position;
-	EndTreeNode.Orientation = TurtleFrame.Frame;
-	EndTreeNode.Radius = BranchRadius;
-	EndTreeNode.ParentIndex = PreviousNodeIndex;
-	
-	FBranchEdge BranchEdge;
-	BranchEdge.NodeStart = PreviousNodeIndex;
-	TreeStructure->Nodes.Add(EndTreeNode);
-	int NewEndIndex = TreeStructure->Nodes.Num() - 1;
-	BranchEdge.NodeEnd = NewEndIndex;
-	BranchEdge.Length = Length;
-	BranchEdge.Mass = PI * BranchRadius * BranchRadius * Length * TreeData->WoodDensity;
-	BranchEdge.Thickness = BranchRadius;
-	TreeStructure->Edges.Add(BranchEdge);
+	TArray<FVector> AttractionPoints = TArray<FVector>();
+	GenerateAttractionPoints(RandomStream, TreeData, AttractionPoints);
 
-	TreeStructure->Modules[ModuleIndex].EdgeIndices.Add(TreeStructure->Edges.Num() - 1);
-	TreeStructure->Modules[ModuleIndex].Mass += BranchEdge.Mass;
+	FTreeNode RootNode = FTreeNode();
+	FTreeNode TrunkNode = FTreeNode();
+	TrunkNode.Position = FVector(RootNode.Position.X, RootNode.Position.Y, RootNode.Position.Z + TreeData->TreeHeight / 2.0f);
+	FBranchEdge BranchEdge = FBranchEdge();
+	BranchEdge.NodeStart = 0;
+	BranchEdge.NodeEnd = 1;
+	TreeStructure->Nodes.Add(RootNode);
+	TreeStructure->Nodes.Add(TrunkNode);
+	TreeStructure->Edges.Add(BranchEdge);
 	
-	if (BranchRadius < TreeData->MinRadius)
+	GenerateNodes(TreeData, TreeStructure, AttractionPoints);
+}
+
+void UTreeGenerator::GenerateNodes(UTreePropertiesDataAsset* TreeData, UTreeStructureDataAsset* TreeStructure,
+	TArray<FVector>& AttractionPoints)
+{
+	TMap<int, TArray<FVector>> AttractionPointsPerNode = TMap<int, TArray<FVector>>();
+	for (const auto AttractionPoint : AttractionPoints)
 	{
-		FLeafInstance LeafInstance;
-		LeafInstance.AttachedNodeIndex = BranchEdge.NodeEnd;
-		TreeStructure->Leaves.Add(LeafInstance);
-		return;
+		int ClosestIndex = 0;
+		for (int i = 0; i < TreeStructure->Nodes.Num(); i++)
+		{
+			FTreeNode CurrentClosestNode = TreeStructure->Nodes[ClosestIndex];
+			FTreeNode Node = TreeStructure->Nodes[i];
+			const float LengthToClosest = (AttractionPoint - CurrentClosestNode.Position).Length();
+			const float Length = (AttractionPoint - Node.Position).Length();
+			if (Length > TreeData->AttractionRadius)
+				continue;
+
+			if (Length < LengthToClosest)
+				ClosestIndex = i;
+		}
+
+		float FinalDist = (AttractionPoint - TreeStructure->Nodes[ClosestIndex].Position).Length();
+		if (FinalDist > TreeData->AttractionRadius)
+			continue;
+			
+		AttractionPointsPerNode.FindOrAdd(ClosestIndex).Add(AttractionPoint);
 	}
+
 	
-	for (int i = 0; i < TreeData->BranchCount; i++)
+	for (auto PointsPerNode : AttractionPointsPerNode)
 	{
-		if (RandomStream.FRandRange(0.0f, 1.0f) > 0.8f)
+		if (PointsPerNode.Value.Num() == 0)
 			continue;
 		
-		float Radius = BranchRadius / FMath::Sqrt(static_cast<float>(TreeData->BranchCount));
-		int NewModuleIndex;
-		FTurtleFrame ChildTurtle;
-		FQuat Pitch;
-		FQuat Yaw;
-		FQuat Roll = FQuat::Identity;
-		if (TreeData->Sympodial)
+		FTreeNode Node = TreeStructure->Nodes[PointsPerNode.Key];
+		TArray<FVector> Points = PointsPerNode.Value;
+
+		FVector AveragePoint = FVector::ZeroVector;
+		for (const auto Point : Points)
 		{
-			NewModuleIndex = TreeStructure->Modules.Num();
-			FBranchModule BranchModule;
-			BranchModule.ParentModuleIndex = ModuleIndex;
-			TreeStructure->Modules.Add(BranchModule);
+			AveragePoint += (Point - Node.Position).GetSafeNormal();
+		}
+		AveragePoint.Normalize();
+		
+		FVector ChildPosition = Node.Position + TreeData->BranchLength * AveragePoint;
+		FTreeNode ChildNode;
+		ChildNode.Position = ChildPosition;
+		TreeStructure->Nodes.Add(ChildNode);
+		FBranchEdge BranchEdge;
+		BranchEdge.NodeStart = PointsPerNode.Key;
+		BranchEdge.NodeEnd = TreeStructure->Nodes.Num() - 1;
+		TreeStructure->Edges.Add(BranchEdge);
+	}
+
+	TArray<FVector> PointsToRemove = TArray<FVector>();
+	for (int i = 0; i < TreeStructure->Nodes.Num(); i++)
+	{
+		FTreeNode Node = TreeStructure->Nodes[i];
+		for (const auto AttractionPoint : AttractionPoints)
+		{
+			const float Length = (AttractionPoint - Node.Position).Length();
+			if (Length > TreeData->KillRadius)
+				continue;
 			
-			Pitch = FQuat(TurtleFrame.Frame.GetRightVector(), FMath::DegreesToRadians(TreeData->BranchAngle + TreeData->BranchAngle * RandomStream.FRandRange(0.1f, 0.2f)));
-			Yaw = FQuat(TurtleFrame.Frame.GetUpVector(), FMath::DegreesToRadians(i * (360.0f / TreeData->BranchCount)));
-			Roll = FQuat(TurtleFrame.Frame.GetForwardVector(), FMath::DegreesToRadians(i * TreeData->PhyllotaxisAngle));
+			PointsToRemove.Add(AttractionPoint);
 		}
-		else
+	}
+
+	for (auto PointToRemove : PointsToRemove)
+		AttractionPoints.Remove(PointToRemove);
+	
+	if (AttractionPoints.Num() == 0)
+		return;
+
+	GenerateNodes(TreeData, TreeStructure, AttractionPoints);
+}
+
+void UTreeGenerator::GenerateAttractionPoints(FRandomStream& RandomStream, UTreePropertiesDataAsset* TreeData,
+	TArray<FVector>& AttractionPoints)
+{
+	for (int i = 0; i < TreeData->NbAttractionPoints; i++)
+	{
+		const float u = RandomStream.FRand();
+		const float v = RandomStream.FRand();
+		
+		const float Phi = 2 * PI * v;
+		float Theta = FMath::Acos(1.0f - 2.0f * u);
+		if (TreeData->TreeShape == ETreeShape::HalfSphere)
+			Theta = FMath::Acos(1.0f - u);
+		
+		if (TreeData->PointDistribution == EPointDistribution::Surface)
 		{
-			if (i == 0)
-			{
-				NewModuleIndex = ModuleIndex;
-				Pitch = FQuat(TurtleFrame.Frame.GetRightVector(), FMath::DegreesToRadians(TreeData->ApicalCurvature));
-				Yaw = FQuat(TurtleFrame.Frame.GetUpVector(), FMath::DegreesToRadians(RandomStream.FRandRange(5.0f, 10.0f)));
-			}
-			else
-			{
-				NewModuleIndex = TreeStructure->Modules.Num();
-				FBranchModule BranchModule;
-				BranchModule.ParentModuleIndex = ModuleIndex;
-				TreeStructure->Modules.Add(BranchModule);
-				
-				int j = i - 1;
-				Pitch = FQuat(TurtleFrame.Frame.GetRightVector(), FMath::DegreesToRadians(TreeData->BranchAngle + TreeData->BranchAngle * RandomStream.FRandRange(0.1f, 0.2f)));
-				Yaw = FQuat(TurtleFrame.Frame.GetUpVector(), FMath::DegreesToRadians(j * (360.0f / (TreeData->BranchCount - 1))));
-				Roll = FQuat(TurtleFrame.Frame.GetForwardVector(), FMath::DegreesToRadians(j * TreeData->PhyllotaxisAngle));
-			}
+			const float x = TreeData->CrownSize * cos(Phi) * sin(Theta);
+			const float y = TreeData->CrownSize * sin(Phi) * sin(Theta);
+			const float z = TreeData->CrownSize * cos(Theta);
+			FVector Point{x, y , z + TreeData->TreeHeight};
+			AttractionPoints.Add(Point);
 		}
-
-		ChildTurtle.Position = TurtleFrame.Position;
-		ChildTurtle.Frame = Pitch * Yaw * Roll * TurtleFrame.Frame;
-
-		GenerateStructure(RandomStream, TreeData, TreeStructure, ChildTurtle, Radius, NewModuleIndex, NewEndIndex);
+		else if (TreeData->PointDistribution == EPointDistribution::Uniform)
+		{
+			const float w = RandomStream.FRand();
+			const float r = TreeData->CrownSize * FMath::Pow(w, 1.0f / 3.0f);
+			const float x = r * cos(Phi) * sin(Theta);
+			const float y = r * sin(Phi) * sin(Theta);
+			const float z = r * cos(Theta);
+			FVector Point{x, y , z + TreeData->TreeHeight};
+			AttractionPoints.Add(Point);
+		}
 	}
 }
+
+
 
 
