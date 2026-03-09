@@ -46,13 +46,19 @@ void ATree::BeginPlay()
 
 void ATree::DebugDrawTree()
 {
+	// for (int i = 0; i < TreeNodes.Num(); i++)
+	// {
+	// 	auto Node = TreeNodes[i];
+	// 	DrawDebugSphere(GetWorld(), Node.Position, 1.0f, 12, FColor::Blue, true, 1.0f);
+	// }
+	
 	TArray<int32> Indices = TArray<int32>();
 	FTransform WorldPosition = GetActorTransform();
 	for (int i = 0; i < BranchEdges.Num(); i++)
 	{
 		FTreeNode Start = TreeNodes[BranchEdges[i].NodeStart];
 		FTreeNode End = TreeNodes[BranchEdges[i].NodeEnd];
-
+	
 		FVector StartPosition = WorldPosition.TransformPosition(Start.Position);
 		FVector EndPosition = WorldPosition.TransformPosition(End.Position);
 		if (!Indices.Contains(BranchEdges[i].NodeStart))
@@ -60,7 +66,7 @@ void ATree::DebugDrawTree()
 			DrawDebugSphere(GetWorld(), StartPosition, Start.Radius, 12, FColor::Blue, true, 1.0f);
 			Indices.Add(BranchEdges[i].NodeStart);
 		}
-
+	
 		if (!Indices.Contains(BranchEdges[i].NodeEnd))
 		{
 			DrawDebugSphere(GetWorld(), EndPosition, End.Radius, 12, FColor::Blue, true, 1.0f);
@@ -73,6 +79,7 @@ void ATree::DebugDrawTree()
 
 void ATree::BuildTreeMesh()
 {
+	double StartTime = FPlatformTime::Seconds();
 	for (int i = 0; i < BranchEdges.Num(); i++)
 	{
 		FTreeNode Start = TreeNodes[BranchEdges[i].NodeStart];
@@ -93,6 +100,10 @@ void ATree::BuildTreeMesh()
 		LeavesInstanceComponent->AddInstance(FTransform(WorldPosition.TransformRotation(Node.Orientation),
 			WorldPosition.TransformPosition(Node.Position)), true);
 	}
+
+	double EndTime = FPlatformTime::Seconds();
+	double ElapsedTime = EndTime - StartTime;
+	UE_LOG(LogTemp, Warning, TEXT("Tree mesh generation execution time: %f seconds."), ElapsedTime);
 }
 
 void ATree::BuildBranchMesh(int Index, FTreeNode Start, FTreeNode End) const

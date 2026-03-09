@@ -25,6 +25,24 @@ struct FTreeNode
 };
 
 USTRUCT(BlueprintType)
+struct FBud
+{
+	GENERATED_BODY()
+	FBud() = default;
+	explicit FBud(const FTreeNode& Node) : Position(Node.Position), Orientation(Node.Orientation){}
+	FBud(const FVector& P, const FQuat& O) : Position(P), Orientation(O){}
+
+	UPROPERTY()
+	int32 BudIndex = INDEX_NONE;
+	UPROPERTY()
+	FVector Position = FVector::ZeroVector;
+	UPROPERTY()
+	FQuat Orientation = FQuat::Identity;
+	UPROPERTY()
+	float Vigor = 0;
+};
+
+USTRUCT(BlueprintType)
 struct FBranchEdge
 {
 	GENERATED_BODY()
