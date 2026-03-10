@@ -1,5 +1,7 @@
 #include "TreeGenerator.h"
 
+#include "FindInBlueprintManager.h"
+#include "Tree.h"
 #include "TreeStructureDataAsset.h"
 #include "TreePropertiesDataAsset.h"
 
@@ -46,6 +48,8 @@ void UTreeGenerator::GenerateStructure(FRandomStream& RandomStream, UTreePropert
 	// }
 	
 	GenerateNodes(0, TreeData, TreeStructure, AttractionPoints, Buds);
+	DecimateNodes(TreeStructure);
+	ComputeRadii(TreeData, TreeStructure);
 	double EndTime = FPlatformTime::Seconds();
 	double ElapsedTime = EndTime - StartTime;
 	UE_LOG(LogTemp, Warning, TEXT("Tree graph generation execution time: %f seconds. Generated %d nodes and %d edges"), ElapsedTime, TreeStructure->Nodes.Num(), TreeStructure->Edges.Num());
@@ -286,6 +290,106 @@ void UTreeGenerator::DoAcropetalPass(int QBase, UTreePropertiesDataAsset* TreeDa
 
 	for (auto& Bud : Buds)
 		Bud.Vigor = Vigor.FindOrAdd(Bud.BudIndex);
+}
+
+void UTreeGenerator::ComputeRadii(UTreePropertiesDataAsset* TreeData, UTreeStructureDataAsset* TreeStructure)
+{
+	TMap<int, TArray<int>> ChildrenOf;
+	for (const auto& Edge : TreeStructure->Edges)
+		ChildrenOf.FindOrAdd(Edge.NodeStart).Add(Edge.NodeEnd);
+	
+	for (auto& Node : TreeStructure->Nodes)
+		Node.Radius = 0.25f; // initial radius for terminal nodes
+	
+	for (int i = TreeStructure->Nodes.Num() - 1; i >= 0; i--)
+	{
+		if (!ChildrenOf.Contains(i))
+			continue;
+
+		const TArray<int>& Children = ChildrenOf[i];
+		if (Children.Num() == 1)
+			TreeStructure->Nodes[i].Radius = TreeStructure->Nodes[Children[0]].Radius;
+		else
+		{
+			float RadiusSumSquared = pow(TreeStructure->Nodes[Children[0]].Radius, TreeData->BranchRadiusExponent);
+			for (int j = 1; j < Children.Num(); j++)
+				RadiusSumSquared += pow(TreeStructure->Nodes[Children[j]].Radius, TreeData->BranchRadiusExponent);
+			
+			TreeStructure->Nodes[i].Radius = pow(RadiusSumSquared, 1.0f/TreeData->BranchRadiusExponent);
+		}
+	}
+}
+
+void UTreeGenerator::DecimateNodes(UTreeStructureDataAsset* TreeStructure)
+{
+	TMap<int, TArray<int>> ChildrenOf;
+	for (const auto& Edge : TreeStructure->Edges)
+		ChildrenOf.FindOrAdd(Edge.NodeStart).Add(Edge.NodeEnd);
+
+	TSet<int> ToKeep;
+	for (int i = 0; i < TreeStructure->Nodes.Num(); i++)
+	{
+		if (!ChildrenOf.Contains(i) || ChildrenOf[i].Num() > 1)
+		{
+			ToKeep.Add(i);
+			continue;
+		}
+		
+		int Child = ChildrenOf[i][0];
+		int Parent = TreeStructure->Nodes[i].ParentIndex;
+		if (Parent == INDEX_NONE)
+		{
+			ToKeep.Add(i);
+			continue;
+		}
+
+		FVector Direction = TreeStructure->Nodes[i].Position - TreeStructure->Nodes[Parent].Position;
+		FVector ChildDirection = TreeStructure->Nodes[Child].Position - TreeStructure->Nodes[i].Position;
+		float Dot = FVector::DotProduct(Direction.GetSafeNormal(), ChildDirection.GetSafeNormal());
+		if (Dot < 0.99f)
+			ToKeep.Add(i);
+	}
+
+	TMap<int, int> RemappedIndices;
+	TArray<FTreeNode> NewNodes;
+	for (int i = 0; i < TreeStructure->Nodes.Num(); i++)
+	{
+		if (ToKeep.Contains(i))
+		{
+			RemappedIndices.Add(i, NewNodes.Num());
+			NewNodes.Add(TreeStructure->Nodes[i]);
+		}
+	}
+
+	TArray<FBranchEdge> BranchEdges;
+	for (const auto& Edge : TreeStructure->Edges)
+	{
+		int Start = Edge.NodeStart;
+		int End = Edge.NodeEnd;
+
+		while (!ToKeep.Contains(End) && ChildrenOf.Contains(End) && ChildrenOf[End].Num() == 1)
+			End = ChildrenOf[End][0];
+
+		if (ToKeep.Contains(Start) && ToKeep.Contains(End))
+		{
+			FBranchEdge NewEdge;
+			NewEdge.NodeStart = RemappedIndices[Start];
+			NewEdge.NodeEnd = RemappedIndices[End];
+			if (BranchEdges.ContainsByPredicate([&]( const FBranchEdge& E ) { return E.NodeEnd == End && E.NodeStart == Start; }))
+				continue;
+
+			BranchEdges.Add(NewEdge);
+		}
+	}
+
+	for (auto& Node : NewNodes)
+	{
+		if (Node.ParentIndex != INDEX_NONE && RemappedIndices.Contains(Node.ParentIndex))
+			Node.ParentIndex = RemappedIndices[Node.ParentIndex];
+	}
+
+	TreeStructure->Nodes = NewNodes;
+	TreeStructure->Edges = BranchEdges;
 }
 
 

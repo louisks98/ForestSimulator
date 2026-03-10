@@ -1,10 +1,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "TreeStructureDataAsset.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "TreeGenerator.generated.h"
 
+struct FBud;
+class UTreePropertiesDataAsset;
 class USkeletalMesh;
 class UTreeStructureDataAsset;
 
@@ -25,4 +26,6 @@ private:
 
 	static float DoBasipetalPass(UTreeStructureDataAsset* TreeStructure, TArray<FBud>& Buds, TMap<int, TArray<FVector>>& AttractionPointsPerBud, TMap<int, TPair<float, float>>& OutQSplit);
 	static void DoAcropetalPass(int QBase, UTreePropertiesDataAsset* TreeData, UTreeStructureDataAsset* TreeStructure, TArray<FBud>& Buds, TMap<int, TPair<float, float>>& QSplit);
+	static void ComputeRadii(UTreePropertiesDataAsset* TreeData, UTreeStructureDataAsset* TreeStructure);
+	static void DecimateNodes(UTreeStructureDataAsset* TreeStructure);
 };

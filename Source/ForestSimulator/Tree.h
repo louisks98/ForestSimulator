@@ -22,6 +22,20 @@ struct FTreeNode
 	float Radius = 1.f;
 	UPROPERTY()
 	float Stiffness = 1.f;
+
+	bool operator==(const FTreeNode& Other) const
+	{
+		if (Position != Other.Position)
+			return false;
+		if (Orientation != Other.Orientation)
+			return false;
+		if (Radius != Other.Radius)
+			return false;
+		if (Stiffness != Other.Stiffness)
+			return false;
+
+		return true;
+	}
 };
 
 USTRUCT(BlueprintType)
@@ -64,6 +78,28 @@ struct FBranchEdge
 	float CharThickness = 0.f;
 	UPROPERTY()
 	float Moisture = 0.5f;
+
+	bool operator==(const FBranchEdge& Other) const
+	{
+		if (NodeStart != Other.NodeStart)
+			return false;
+		if (NodeEnd != Other.NodeEnd)
+			return false;
+		if (Length != Other.Length)
+			return false;
+		if (Temperature != Other.Temperature)
+			return false;
+		if (Mass != Other.Mass)
+			return false;
+		if (Thickness != Other.Thickness)
+			return false;
+		if (CharThickness != Other.CharThickness)
+			return false;
+		if (Moisture != Other.Moisture)
+			return false;
+		
+		return true;
+	}
 };
 
 USTRUCT(BlueprintType)

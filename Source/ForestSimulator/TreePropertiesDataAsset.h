@@ -42,6 +42,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
 	float BranchAngle;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
+	float BranchRadiusExponent = 2.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
 	float PerceptionAngle;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
 	float PerceptionLength;
