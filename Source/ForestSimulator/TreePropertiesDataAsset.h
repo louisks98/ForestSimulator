@@ -32,13 +32,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
 	float CrownSize;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
-	float TreeHeight;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
 	float TrunkHeight;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
 	int NbAttractionPoints;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
-	float BranchLength;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
 	float BranchAngle;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
