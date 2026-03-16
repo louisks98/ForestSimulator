@@ -52,5 +52,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
 	int32 MaxIteration;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
+	int32 Subdivisions = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
 	int32 RandomSeed;
 };

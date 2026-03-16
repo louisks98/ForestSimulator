@@ -28,4 +28,6 @@ private:
 	static void DoAcropetalPass(float QBase, UTreePropertiesDataAsset* TreeData, UTreeStructureDataAsset* TreeStructure, TArray<FBud>& Buds, TMap<int, TPair<float, float>>& QSplit);
 	static void ComputeRadii(UTreePropertiesDataAsset* TreeData, UTreeStructureDataAsset* TreeStructure);
 	static void DecimateNodes(UTreeStructureDataAsset* TreeStructure);
+	static void Subdivide(UTreeStructureDataAsset* TreeStructure);
+	static void RelocateNodes(UTreeStructureDataAsset* TreeStructure);
 };

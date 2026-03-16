@@ -48,6 +48,12 @@ void UTreeGenerator::GenerateStructure(FRandomStream& RandomStream, UTreePropert
 	GenerateNodes(0, TreeData, TreeStructure, AttractionPoints, Buds);
 	DecimateNodes(TreeStructure);
 	ComputeRadii(TreeData, TreeStructure);
+
+	for (int i = 0; i < TreeData->Subdivisions; i++)
+		Subdivide(TreeStructure);
+
+	RelocateNodes(TreeStructure);
+	
 	double EndTime = FPlatformTime::Seconds();
 	double ElapsedTime = EndTime - StartTime;
 	UE_LOG(LogTemp, Warning, TEXT("Tree graph generation execution time: %f seconds. Generated %d nodes and %d edges"), ElapsedTime, TreeStructure->Nodes.Num(), TreeStructure->Edges.Num());
@@ -381,20 +387,144 @@ void UTreeGenerator::DecimateNodes(UTreeStructureDataAsset* TreeStructure)
 			if (BranchEdges.ContainsByPredicate([&]( const FBranchEdge& E ) { return E.NodeEnd == RemappedIndices[End] && E.NodeStart == RemappedIndices[Start]; }))
 				continue;
 
+			NewNodes[NewEdge.NodeEnd].ParentIndex = NewEdge.NodeStart;
 			BranchEdges.Add(NewEdge);
 		}
 	}
-
-	for (auto& Node : NewNodes)
-	{
-		if (Node.ParentIndex != INDEX_NONE && RemappedIndices.Contains(Node.ParentIndex))
-			Node.ParentIndex = RemappedIndices[Node.ParentIndex];
-	}
-
+	
 	TreeStructure->Nodes = NewNodes;
 	TreeStructure->Edges = BranchEdges;
 }
 
+void UTreeGenerator::Subdivide(UTreeStructureDataAsset* TreeStructure)
+{
+	TMap<int, TArray<int>> ChildrenOf;
+	for (const auto& Edge : TreeStructure->Edges)
+		ChildrenOf.FindOrAdd(Edge.NodeStart).Add(Edge.NodeEnd);
 
+	TSet<int> ToKeep;
+	for (int i = 0; i < TreeStructure->Nodes.Num(); i++)
+	{
+		if (!ChildrenOf.Contains(i) || ChildrenOf[i].Num() > 1)
+		{
+			ToKeep.Add(i);
+			continue;
+		}
+		
+		int Parent = TreeStructure->Nodes[i].ParentIndex;
+		if (Parent == INDEX_NONE)
+			ToKeep.Add(i);
+		
+	}
+	TMap<int, int> RemappedIndices;
+	TArray<FTreeNode> NewNodes;
+	for (int i = 0; i < TreeStructure->Nodes.Num(); i++)
+	{
+		if (ToKeep.Contains(i))
+		{
+			RemappedIndices.Add(i, NewNodes.Num());
+			NewNodes.Add(TreeStructure->Nodes[i]);
+		}
+	}
+
+	TArray<FBranchEdge> NewBranches;
+	for (const auto& Edge : TreeStructure->Edges)
+	{
+		int Start = Edge.NodeStart;
+		int End = Edge.NodeEnd;
+
+		if (!ToKeep.Contains(Start))
+			continue;
+		
+		TArray<int> Chain;
+		Chain.Add(Start);
+		while (!ToKeep.Contains(End) && ChildrenOf.Contains(End) && ChildrenOf[End].Num() == 1)
+		{
+			Chain.Add(End);
+			End = ChildrenOf[End][0];
+		}
+
+
+		if (Chain.Num() < 2)
+		{
+			if (ToKeep.Contains(End) && ToKeep.Contains(Start))
+			{
+				FBranchEdge NewEdge;
+				NewEdge.NodeStart = RemappedIndices[Start];
+				NewEdge.NodeEnd = RemappedIndices[End];
+				NewBranches.Add(NewEdge);
+			}
+			continue;
+		}
+		
+		TArray<FTreeNode> ChaikinPoints;
+		for (int i = 0; i < Chain.Num() - 1; i++)
+		{
+			FTreeNode Node = TreeStructure->Nodes[Chain[i]];
+			FTreeNode ChildNode = TreeStructure->Nodes[Chain[i + 1]];
+			FVector Q = 0.75f * Node.Position + 0.25f * ChildNode.Position;
+			FVector R = 0.25f * Node.Position + 0.75f * ChildNode.Position;
+
+			FTreeNode QNode;
+			QNode.Position = Q;
+			QNode.Orientation = Node.Orientation;
+			QNode.Radius = FMath::Lerp(Node.Radius, ChildNode.Radius, 0.25f);
+			FTreeNode RNode;
+			RNode.Position = R;
+			RNode.Orientation = Node.Orientation;
+			RNode.Radius = FMath::Lerp(Node.Radius, ChildNode.Radius, 0.75f);
+
+			ChaikinPoints.Add(QNode);
+			ChaikinPoints.Add(RNode);
+		}
+		
+		int ParentIndex = RemappedIndices[Start];
+		for (int i = 0; i < ChaikinPoints.Num(); i += 2)
+		{
+			FBranchEdge ParentToQ;
+			FBranchEdge QToR;
+			FTreeNode QNode = ChaikinPoints[i];
+			QNode.ParentIndex = ParentIndex;
+			FTreeNode RNode = ChaikinPoints[i + 1];
+
+			ParentToQ.NodeStart = ParentIndex;
+			ParentToQ.NodeEnd = NewNodes.Num();
+			RNode.ParentIndex = NewNodes.Num();
+			NewNodes.Add(QNode);
+			
+			QToR.NodeStart = NewNodes.Num() - 1;
+			QToR.NodeEnd = NewNodes.Num();
+			NewNodes.Add(RNode);
+
+			NewBranches.Add(ParentToQ);
+			NewBranches.Add(QToR);
+			ParentIndex = NewNodes.Num() - 1;
+		}
+
+		FBranchEdge FinalEdge;
+		FinalEdge.NodeStart = ParentIndex;
+		FinalEdge.NodeEnd = RemappedIndices[End];
+		NewBranches.Add(FinalEdge);
+	}
+
+	for (const auto& Edge : NewBranches)
+		NewNodes[Edge.NodeEnd].ParentIndex = Edge.NodeStart;
+
+	TreeStructure->Nodes = NewNodes;
+	TreeStructure->Edges = NewBranches;
+}
+
+void UTreeGenerator::RelocateNodes(UTreeStructureDataAsset* TreeStructure)
+{
+	TArray<FVector> OriginalPositions;
+	for (const auto& Node : TreeStructure->Nodes)
+		OriginalPositions.Add(Node.Position);
+
+	for (int i = 2; i < TreeStructure->Nodes.Num(); i++)
+	{
+		int Parent = TreeStructure->Nodes[i].ParentIndex;
+		TreeStructure->Nodes[i].Position = OriginalPositions[Parent] + 0.5 * (OriginalPositions[i] - OriginalPositions[Parent]);
+	}
+}
 
 
