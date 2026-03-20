@@ -22,19 +22,25 @@ void UTreeGenerator::GenerateStructure(FRandomStream& RandomStream, UTreePropert
 	GenerateAttractionPoints(RandomStream, TreeData, AttractionPoints);
 
 	FTreeNode RootNode = FTreeNode();
-	FTreeNode TrunkNode = FTreeNode();
-	TrunkNode.Position = FVector(RootNode.Position.X, RootNode.Position.Y, RootNode.Position.Z + TreeData->TrunkHeight);
-	TrunkNode.Orientation = FRotationMatrix::MakeFromX(FVector::UpVector).ToQuat();
-	TrunkNode.ParentIndex = 0;
-	FBranchEdge BranchEdge = FBranchEdge();
-	BranchEdge.NodeStart = 0;
-	BranchEdge.NodeEnd = 1;
 	TreeStructure->Nodes.Add(RootNode);
-	TreeStructure->Nodes.Add(TrunkNode);
-	TreeStructure->Edges.Add(BranchEdge);
+	for (int i = 1; i <= TreeData->TrunkSegments; i++)
+	{
+		FTreeNode TrunkNode = FTreeNode();
+		TrunkNode.Position = FVector(RootNode.Position.X, RootNode.Position.Y, RootNode.Position.Z + (TreeData->TrunkHeight / TreeData->TrunkSegments));
+		TrunkNode.Orientation = FRotationMatrix::MakeFromX(FVector::UpVector).ToQuat();
+		TrunkNode.ParentIndex = TreeStructure->Nodes.Num() - 1;
+		FBranchEdge BranchEdge = FBranchEdge();
+		BranchEdge.NodeStart = TreeStructure->Nodes.Num() - 1;
+		BranchEdge.NodeEnd = TreeStructure->Nodes.Num();
+		TreeStructure->Nodes.Add(TrunkNode);
+		TreeStructure->Edges.Add(BranchEdge);
 
-	FBud TrunkBud{TrunkNode};
-	TrunkBud.BudIndex = 1;
+		RootNode = TrunkNode;
+	}
+	
+
+	FBud TrunkBud{RootNode};
+	TrunkBud.BudIndex = TreeStructure->Nodes.Num() - 1;
 	TArray<FBud> Buds = TArray<FBud>();
 	Buds.Add(TrunkBud);
 
@@ -47,12 +53,11 @@ void UTreeGenerator::GenerateStructure(FRandomStream& RandomStream, UTreePropert
 	
 	GenerateNodes(0, TreeData, TreeStructure, AttractionPoints, Buds);
 	DecimateNodes(TreeStructure);
+	RelocateNodes(TreeStructure);
 	ComputeRadii(TreeData, TreeStructure);
 
 	for (int i = 0; i < TreeData->Subdivisions; i++)
 		Subdivide(TreeStructure);
-
-	RelocateNodes(TreeStructure);
 	
 	double EndTime = FPlatformTime::Seconds();
 	double ElapsedTime = EndTime - StartTime;
@@ -132,8 +137,9 @@ void UTreeGenerator::GenerateNodes(int Iterations, UTreePropertiesDataAsset* Tre
 		FTreeNode ChildNode;
 		for (int i = 0 ; i < NbNewSegments ; i++)
 		{
-			FVector ChildPosition = ParentPosition + BranchLength * AveragePoint;
-			//GrowthDirection = (GrowthDirection + NbNewSegments * FVector::DownVector).GetSafeNormal();
+			FVector Tropism = TreeData->TropismWeight * FVector::UpVector;
+			FVector BiasedDirection = (AveragePoint + Tropism).GetSafeNormal();
+			FVector ChildPosition = ParentPosition + BranchLength * BiasedDirection;
 			ChildNode.Position = ChildPosition;
 			ChildNode.Orientation = FRotationMatrix::MakeFromX(GrowthDirection).ToQuat();
 			ChildNode.ParentIndex = ParentIndex;
@@ -231,7 +237,7 @@ float UTreeGenerator::DoBasipetalPass(UTreeStructureDataAsset* TreeStructure, TA
 	{
 		FBud Bud = Buds[i];
 		if (AttractionPointsPerBud.Contains(i))
-			QValues.FindOrAdd(Bud.BudIndex) += AttractionPointsPerBud.Num() > 0 ? 1.0f : 0.0f;
+			QValues.FindOrAdd(Bud.BudIndex) += 1.0f;
 		else
 			QValues.FindOrAdd(Bud.BudIndex) = 0.0f;
 	}
@@ -316,16 +322,21 @@ void UTreeGenerator::ComputeRadii(UTreePropertiesDataAsset* TreeData, UTreeStruc
 			continue;
 
 		const TArray<int>& Children = ChildrenOf[i];
-		if (Children.Num() == 1)
-			TreeStructure->Nodes[i].Radius = TreeStructure->Nodes[Children[0]].Radius;
-		else
-		{
-			float RadiusSumSquared = pow(TreeStructure->Nodes[Children[0]].Radius, TreeData->BranchRadiusExponent);
-			for (int j = 1; j < Children.Num(); j++)
-				RadiusSumSquared += pow(TreeStructure->Nodes[Children[j]].Radius, TreeData->BranchRadiusExponent);
+		float RadiusSumSquared = pow(TreeStructure->Nodes[Children[0]].Radius, TreeData->BranchRadiusExponent);
+		for (int j = 1; j < Children.Num(); j++)
+			RadiusSumSquared += pow(TreeStructure->Nodes[Children[j]].Radius, TreeData->BranchRadiusExponent);
 			
-			TreeStructure->Nodes[i].Radius = pow(RadiusSumSquared, 1.0f/TreeData->BranchRadiusExponent);
-		}
+		TreeStructure->Nodes[i].Radius = pow(RadiusSumSquared, 1.0f/TreeData->BranchRadiusExponent);
+	}
+
+	FTreeNode RootNode = TreeStructure->Nodes[0];
+	float MaxHeight = TreeData->CrownSize + TreeData->TrunkHeight;
+	for (int i = 1; i < TreeStructure->Nodes.Num(); i++)
+	{
+		FTreeNode& Node = TreeStructure->Nodes[i];
+		const float Distance = FVector::Distance(RootNode.Position, Node.Position);
+		const float Factor = FMath::Lerp(1.5f, 1.0f, Distance / MaxHeight);
+		Node.Radius *= Factor;
 	}
 }
 
@@ -443,7 +454,7 @@ void UTreeGenerator::Subdivide(UTreeStructureDataAsset* TreeStructure)
 			Chain.Add(End);
 			End = ChildrenOf[End][0];
 		}
-
+		Chain.Add(End);
 
 		if (Chain.Num() < 2)
 		{
@@ -520,7 +531,7 @@ void UTreeGenerator::RelocateNodes(UTreeStructureDataAsset* TreeStructure)
 	for (const auto& Node : TreeStructure->Nodes)
 		OriginalPositions.Add(Node.Position);
 
-	for (int i = 2; i < TreeStructure->Nodes.Num(); i++)
+	for (int i = 1; i < TreeStructure->Nodes.Num(); i++)
 	{
 		int Parent = TreeStructure->Nodes[i].ParentIndex;
 		TreeStructure->Nodes[i].Position = OriginalPositions[Parent] + 0.5 * (OriginalPositions[i] - OriginalPositions[Parent]);

@@ -34,6 +34,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
 	float TrunkHeight;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
+	float TrunkSegments;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
 	int NbAttractionPoints;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
 	float BranchAngle;
@@ -49,6 +51,8 @@ public:
 	float ResourceCoefficient = 2.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
 	float ApicalControl = 0.5f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
+	float TropismWeight;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
 	int32 MaxIteration;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
