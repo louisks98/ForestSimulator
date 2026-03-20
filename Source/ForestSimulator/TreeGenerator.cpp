@@ -1,32 +1,76 @@
 #include "TreeGenerator.h"
-#include "Tree.h"
-#include "TreeStructureDataAsset.h"
-#include "TreePropertiesDataAsset.h"
 
-void UTreeGenerator::GenerateTreeStructure(UTreePropertiesDataAsset* TreePropertiesData, UTreeStructureDataAsset* TreeStructureData)
+
+TreeGenerator::TreeGenerator(UTreePropertiesDataAsset* TreePropertiesData, UTreeStructureDataAsset* TreeStructureData)
 {
 	TreeStructureData->Edges.Empty();
 	TreeStructureData->Nodes.Empty();
 	TreeStructureData->Leaves.Empty();
 	TreeStructureData->Modules.Empty();
 	
-	FRandomStream Random{TreePropertiesData->RandomSeed};
-	
-	GenerateStructure(Random, TreePropertiesData, TreeStructureData);
+	RandomStream = {TreePropertiesData->RandomSeed};
+	TreeProperties = TreePropertiesData;
+	TreeStructure = TreeStructureData;
 }
 
-void UTreeGenerator::GenerateStructure(FRandomStream& RandomStream, UTreePropertiesDataAsset* TreeData, UTreeStructureDataAsset* TreeStructure)
+UTreeStructureDataAsset* TreeGenerator::GenerateTreeStructure()
 {
-	double StartTime = FPlatformTime::Seconds();
-	TArray<FVector> AttractionPoints = TArray<FVector>();
-	GenerateAttractionPoints(RandomStream, TreeData, AttractionPoints);
+	GenerateAttractionPoints();
+	TArray<FBud> Buds = InitializeTrunk();
+	GenerateNodes(0, Buds);
+	DecimateNodes();
+	RelocateNodesTowardsParent();
+	ComputeRadii();
+	
+	for (int i = 0; i < TreeProperties->Subdivisions; i++)
+		Subdivide();
+	
+	return TreeStructure;
+}
 
+void TreeGenerator::GenerateAttractionPoints()
+{
+	for (int i = 0; i < TreeProperties->NbAttractionPoints; i++)
+	{
+		const float TrunkHeight = TreeProperties->TrunkHeight;
+		const float u = RandomStream.FRand();
+		const float v = RandomStream.FRand();
+		
+		const float Phi = 2 * PI * v;
+		float Theta = FMath::Acos(1.0f - 2.0f * u);
+		if (TreeProperties->TreeShape == ETreeShape::HalfSphere)
+			Theta = FMath::Acos(1.0f - u);
+		
+		if (TreeProperties->PointDistribution == EPointDistribution::Surface)
+		{
+			const float x = TreeProperties->CrownSize * cos(Phi) * sin(Theta);
+			const float y = TreeProperties->CrownSize * sin(Phi) * sin(Theta);
+			const float z = TreeProperties->CrownSize * cos(Theta);
+			FVector Point{x, y , z + TrunkHeight};
+			AttractionPoints.Add(Point);
+		}
+		else if (TreeProperties->PointDistribution == EPointDistribution::Uniform)
+		{
+			const float w = RandomStream.FRand();
+			const float r = TreeProperties->CrownSize * FMath::Pow(w, 1.0f / 3.0f);
+			const float x = r * cos(Phi) * sin(Theta);
+			const float y = r * sin(Phi) * sin(Theta);
+			const float z = r * cos(Theta);
+			FVector Point{x, y , z + TrunkHeight};
+			AttractionPoints.Add(Point);
+		}
+	}
+}
+
+TArray<FBud> TreeGenerator::InitializeTrunk() const
+{
 	FTreeNode RootNode = FTreeNode();
 	TreeStructure->Nodes.Add(RootNode);
-	for (int i = 1; i <= TreeData->TrunkSegments; i++)
+	for (int i = 1; i <= TreeProperties->TrunkSegments; i++)
 	{
 		FTreeNode TrunkNode = FTreeNode();
-		TrunkNode.Position = FVector(RootNode.Position.X, RootNode.Position.Y, RootNode.Position.Z + (TreeData->TrunkHeight / TreeData->TrunkSegments));
+		TrunkNode.Position = FVector(RootNode.Position.X, RootNode.Position.Y, RootNode.Position.Z 
+			+ (TreeProperties->TrunkHeight / TreeProperties->TrunkSegments));
 		TrunkNode.Orientation = FRotationMatrix::MakeFromX(FVector::UpVector).ToQuat();
 		TrunkNode.ParentIndex = TreeStructure->Nodes.Num() - 1;
 		FBranchEdge BranchEdge = FBranchEdge();
@@ -38,36 +82,16 @@ void UTreeGenerator::GenerateStructure(FRandomStream& RandomStream, UTreePropert
 		RootNode = TrunkNode;
 	}
 	
-
 	FBud TrunkBud{RootNode};
 	TrunkBud.BudIndex = TreeStructure->Nodes.Num() - 1;
 	TArray<FBud> Buds = TArray<FBud>();
 	Buds.Add(TrunkBud);
-
-	// for (auto Point : AttractionPoints)
-	// {
-	// 	FTreeNode AttractionNode = FTreeNode();
-	// 	AttractionNode.Position = Point;
-	// 	TreeStructure->Nodes.Add(AttractionNode);
-	// }
-	
-	GenerateNodes(0, TreeData, TreeStructure, AttractionPoints, Buds);
-	DecimateNodes(TreeStructure);
-	RelocateNodes(TreeStructure);
-	ComputeRadii(TreeData, TreeStructure);
-
-	for (int i = 0; i < TreeData->Subdivisions; i++)
-		Subdivide(TreeStructure);
-	
-	double EndTime = FPlatformTime::Seconds();
-	double ElapsedTime = EndTime - StartTime;
-	UE_LOG(LogTemp, Warning, TEXT("Tree graph generation execution time: %f seconds. Generated %d nodes and %d edges"), ElapsedTime, TreeStructure->Nodes.Num(), TreeStructure->Edges.Num());
+	return Buds;
 }
 
-void UTreeGenerator::GenerateNodes(int Iterations, UTreePropertiesDataAsset* TreeData, UTreeStructureDataAsset* TreeStructure,
-	TArray<FVector>& AttractionPoints , TArray<FBud>& Buds)
+void TreeGenerator::GenerateNodes(int Iteration, TArray<FBud>& Buds)
 {
-	if (Iterations >= TreeData->MaxIteration)
+	if (Iteration >= TreeProperties->MaxIteration)
 		return;
 	
 	TArray<FVector> PointsToRemove = TArray<FVector>();
@@ -80,12 +104,12 @@ void UTreeGenerator::GenerateNodes(int Iterations, UTreePropertiesDataAsset* Tre
 		for (int i = 0; i < Buds.Num(); i++)
 		{
 			FBud Bud = Buds[i];
-			float ConeRadius = TreeData->PerceptionLength * tan(  FMath::DegreesToRadians(TreeData->PerceptionAngle / 2.0f));
+			float ConeRadius = TreeProperties->PerceptionLength * tan(  FMath::DegreesToRadians(TreeProperties->PerceptionAngle / 2.0f));
 			float ConeDist = FVector::DotProduct(Point - Bud.Position, Bud.Orientation.GetForwardVector());
-			if (ConeDist < 0 || ConeDist > TreeData->PerceptionLength)
+			if (ConeDist < 0 || ConeDist > TreeProperties->PerceptionLength)
 				continue;
 
-			float RadiusAtPoint = (ConeDist / TreeData->PerceptionLength) * ConeRadius;
+			float RadiusAtPoint = (ConeDist / TreeProperties->PerceptionLength) * ConeRadius;
 			FVector Ortho = (Point - Bud.Position) - ConeDist * Bud.Orientation.GetForwardVector();
 			if (Ortho.Length() > RadiusAtPoint)
 				continue;
@@ -106,8 +130,8 @@ void UTreeGenerator::GenerateNodes(int Iterations, UTreePropertiesDataAsset* Tre
 		return;
 
 	TMap<int, TPair<float, float>> QSplit;
-	float Q = DoBasipetalPass(TreeStructure, Buds, AttractionPointsPerBud, QSplit);
-	DoAcropetalPass(Q, TreeData, TreeStructure, Buds, QSplit);
+	float Q = ComputeLightExposure(Buds, AttractionPointsPerBud, QSplit);
+	DistributeVigor(Q, Buds, QSplit);
 	
 	TArray<FBud> NewBuds = TArray<FBud>();
 	for (const auto& PointsPerBud : AttractionPointsPerBud)
@@ -137,7 +161,7 @@ void UTreeGenerator::GenerateNodes(int Iterations, UTreePropertiesDataAsset* Tre
 		FTreeNode ChildNode;
 		for (int i = 0 ; i < NbNewSegments ; i++)
 		{
-			FVector Tropism = TreeData->TropismWeight * FVector::UpVector;
+			FVector Tropism = TreeProperties->TropismWeight * FVector::UpVector;
 			FVector BiasedDirection = (AveragePoint + Tropism).GetSafeNormal();
 			FVector ChildPosition = ParentPosition + BranchLength * BiasedDirection;
 			ChildNode.Position = ChildPosition;
@@ -155,7 +179,8 @@ void UTreeGenerator::GenerateNodes(int Iterations, UTreePropertiesDataAsset* Tre
 			ParentIndex = ChildIndex;
 			
 			FQuat LateralQuat = FQuat(GrowthDirection, FMath::DegreesToRadians(137.5 * (i + 1)));
-			FQuat RotationQuat = FQuat(FVector::CrossProduct(GrowthDirection, FVector::UpVector).GetSafeNormal(), FMath::DegreesToRadians(TreeData->BranchAngle));
+			FQuat RotationQuat = FQuat(FVector::CrossProduct(GrowthDirection, FVector::UpVector).GetSafeNormal(), 
+				FMath::DegreesToRadians(TreeProperties->BranchAngle));
 			FVector RotatedGrowthDir =  RotationQuat.RotateVector(GrowthDirection);
 			FVector LateralGrowthDirection = LateralQuat.RotateVector(RotatedGrowthDir);
 			
@@ -176,7 +201,7 @@ void UTreeGenerator::GenerateNodes(int Iterations, UTreePropertiesDataAsset* Tre
 		FBud Bud = AllBuds[i];
 		for (const auto& Point : AttractionPoints)
 		{
-			if (FVector::DistSquared(Point, Bud.Position) < FMath::Square(TreeData->OccupancyRadius))
+			if (FVector::DistSquared(Point, Bud.Position) < FMath::Square(TreeProperties->OccupancyRadius))
 				PointsToRemove.Add(Point);
 		}
 	}
@@ -187,50 +212,15 @@ void UTreeGenerator::GenerateNodes(int Iterations, UTreePropertiesDataAsset* Tre
 	if (AttractionPoints.Num() == 0)
 		return;
 	
-	GenerateNodes(Iterations + 1, TreeData, TreeStructure, AttractionPoints, NewBuds);
+	GenerateNodes(Iteration + 1, NewBuds);
 }
 
-void UTreeGenerator::GenerateAttractionPoints(FRandomStream& RandomStream, UTreePropertiesDataAsset* TreeData,
-	TArray<FVector>& AttractionPoints)
+// Accumulates a Q value for each bud in the structure going from tips to root (basipetal).
+// At branching points values Q_m (main axis) and Q_l (lateral axis) are calculated and stored for the vigor distribution
+float TreeGenerator::ComputeLightExposure(TArray<FBud>& Buds, const TMap<int, TArray<FVector>>& AttractionPointsPerBud,
+	TMap<int, TPair<float, float>>& OutQSplit)
 {
-	for (int i = 0; i < TreeData->NbAttractionPoints; i++)
-	{
-		const float TrunkHeight = TreeData->TrunkHeight;
-		const float u = RandomStream.FRand();
-		const float v = RandomStream.FRand();
-		
-		const float Phi = 2 * PI * v;
-		float Theta = FMath::Acos(1.0f - 2.0f * u);
-		if (TreeData->TreeShape == ETreeShape::HalfSphere)
-			Theta = FMath::Acos(1.0f - u);
-		
-		if (TreeData->PointDistribution == EPointDistribution::Surface)
-		{
-			const float x = TreeData->CrownSize * cos(Phi) * sin(Theta);
-			const float y = TreeData->CrownSize * sin(Phi) * sin(Theta);
-			const float z = TreeData->CrownSize * cos(Theta);
-			FVector Point{x, y , z + TrunkHeight};
-			AttractionPoints.Add(Point);
-		}
-		else if (TreeData->PointDistribution == EPointDistribution::Uniform)
-		{
-			const float w = RandomStream.FRand();
-			const float r = TreeData->CrownSize * FMath::Pow(w, 1.0f / 3.0f);
-			const float x = r * cos(Phi) * sin(Theta);
-			const float y = r * sin(Phi) * sin(Theta);
-			const float z = r * cos(Theta);
-			FVector Point{x, y , z + TrunkHeight};
-			AttractionPoints.Add(Point);
-		}
-	}
-}
-
-float UTreeGenerator::DoBasipetalPass(UTreeStructureDataAsset* TreeStructure, TArray<FBud>& Buds,
-	TMap<int, TArray<FVector>>& AttractionPointsPerBud, TMap<int, TPair<float, float>>& OutQSplit)
-{
-	TMap<int, TArray<int>> ChildrenOf;
-	for (const auto& Edge : TreeStructure->Edges)
-		ChildrenOf.FindOrAdd(Edge.NodeStart).Add(Edge.NodeEnd);
+	TMap<int, TArray<int>> ChildrenOf = GetNodesSplitByChildren();
 
 	TMap<int, float> QValues;
 	for (int i = 0; i < Buds.Num(); i++)
@@ -267,13 +257,12 @@ float UTreeGenerator::DoBasipetalPass(UTreeStructureDataAsset* TreeStructure, TA
 	return QValues[0];
 }
 
-void UTreeGenerator::DoAcropetalPass(float QBase, UTreePropertiesDataAsset* TreeData, UTreeStructureDataAsset* TreeStructure, TArray<FBud>& Buds, TMap<int, TPair<float, float>>& QSplit)
+// Starting from the root's Q value, compute and distribute the vigor to each bud, going from root to tip (acropetal)
+void TreeGenerator::DistributeVigor(const float QBase, TArray<FBud>& Buds, TMap<int, TPair<float, float>>& QSplit)
 {
-	float VBase = QBase * TreeData->ResourceCoefficient;
+	float VBase = QBase * TreeProperties->ResourceCoefficient;
 
-	TMap<int, TArray<int>> ChildrenOf;
-	for (const auto& Edge : TreeStructure->Edges)
-		ChildrenOf.FindOrAdd(Edge.NodeStart).Add(Edge.NodeEnd);
+	TMap<int, TArray<int>> ChildrenOf = GetNodesSplitByChildren();
 
 	TMap<int, float> Vigor;
 	Vigor.Add(0, VBase);
@@ -294,7 +283,7 @@ void UTreeGenerator::DoAcropetalPass(float QBase, UTreePropertiesDataAsset* Tree
 			if (Qm == 0.0f && Ql == 0.0f)
 				Vm = v * 0.5;
 			else
-				Vm = v * (TreeData->ApicalControl * Qm) / (TreeData->ApicalControl * Qm + (1 - TreeData->ApicalControl) * Ql);
+				Vm = v * (TreeProperties->ApicalControl * Qm) / (TreeProperties->ApicalControl * Qm + (1 - TreeProperties->ApicalControl) * Ql);
 
 			float Vl = v - Vm;
 			Vigor.Add(Children[0], Vm);
@@ -307,11 +296,10 @@ void UTreeGenerator::DoAcropetalPass(float QBase, UTreePropertiesDataAsset* Tree
 		Bud.Vigor = Vigor.FindOrAdd(Bud.BudIndex);
 }
 
-void UTreeGenerator::ComputeRadii(UTreePropertiesDataAsset* TreeData, UTreeStructureDataAsset* TreeStructure)
+// Compute the radius of each node using the Pipe Model
+void TreeGenerator::ComputeRadii()
 {
-	TMap<int, TArray<int>> ChildrenOf;
-	for (const auto& Edge : TreeStructure->Edges)
-		ChildrenOf.FindOrAdd(Edge.NodeStart).Add(Edge.NodeEnd);
+	TMap<int, TArray<int>> ChildrenOf = GetNodesSplitByChildren();
 	
 	for (auto& Node : TreeStructure->Nodes)
 		Node.Radius = 0.25f; // initial radius for terminal nodes
@@ -322,15 +310,15 @@ void UTreeGenerator::ComputeRadii(UTreePropertiesDataAsset* TreeData, UTreeStruc
 			continue;
 
 		const TArray<int>& Children = ChildrenOf[i];
-		float RadiusSumSquared = pow(TreeStructure->Nodes[Children[0]].Radius, TreeData->BranchRadiusExponent);
+		float RadiusSumSquared = pow(TreeStructure->Nodes[Children[0]].Radius, TreeProperties->BranchRadiusExponent);
 		for (int j = 1; j < Children.Num(); j++)
-			RadiusSumSquared += pow(TreeStructure->Nodes[Children[j]].Radius, TreeData->BranchRadiusExponent);
+			RadiusSumSquared += pow(TreeStructure->Nodes[Children[j]].Radius, TreeProperties->BranchRadiusExponent);
 			
-		TreeStructure->Nodes[i].Radius = pow(RadiusSumSquared, 1.0f/TreeData->BranchRadiusExponent);
+		TreeStructure->Nodes[i].Radius = pow(RadiusSumSquared, 1.0f/TreeProperties->BranchRadiusExponent);
 	}
 
 	FTreeNode RootNode = TreeStructure->Nodes[0];
-	float MaxHeight = TreeData->CrownSize + TreeData->TrunkHeight;
+	float MaxHeight = TreeProperties->CrownSize + TreeProperties->TrunkHeight;
 	for (int i = 1; i < TreeStructure->Nodes.Num(); i++)
 	{
 		FTreeNode& Node = TreeStructure->Nodes[i];
@@ -340,12 +328,9 @@ void UTreeGenerator::ComputeRadii(UTreePropertiesDataAsset* TreeData, UTreeStruc
 	}
 }
 
-void UTreeGenerator::DecimateNodes(UTreeStructureDataAsset* TreeStructure)
+void TreeGenerator::DecimateNodes()
 {
-	TMap<int, TArray<int>> ChildrenOf;
-	for (const auto& Edge : TreeStructure->Edges)
-		ChildrenOf.FindOrAdd(Edge.NodeStart).Add(Edge.NodeEnd);
-
+	TMap<int, TArray<int>> ChildrenOf = GetNodesSplitByChildren();
 	TSet<int> ToKeep;
 	for (int i = 0; i < TreeStructure->Nodes.Num(); i++)
 	{
@@ -407,12 +392,23 @@ void UTreeGenerator::DecimateNodes(UTreeStructureDataAsset* TreeStructure)
 	TreeStructure->Edges = BranchEdges;
 }
 
-void UTreeGenerator::Subdivide(UTreeStructureDataAsset* TreeStructure)
+void TreeGenerator::RelocateNodesTowardsParent() const
 {
-	TMap<int, TArray<int>> ChildrenOf;
-	for (const auto& Edge : TreeStructure->Edges)
-		ChildrenOf.FindOrAdd(Edge.NodeStart).Add(Edge.NodeEnd);
+	TArray<FVector> OriginalPositions;
+	for (const auto& Node : TreeStructure->Nodes)
+		OriginalPositions.Add(Node.Position);
 
+	for (int i = 1; i < TreeStructure->Nodes.Num(); i++)
+	{
+		int Parent = TreeStructure->Nodes[i].ParentIndex;
+		TreeStructure->Nodes[i].Position = OriginalPositions[Parent] + 0.5 * (OriginalPositions[i] - OriginalPositions[Parent]);
+	}
+}
+
+// Subdivide tree branches using Chaikin's algorithm for curves
+void TreeGenerator::Subdivide() const
+{
+	TMap<int, TArray<int>> ChildrenOf = GetNodesSplitByChildren();
 	TSet<int> ToKeep;
 	for (int i = 0; i < TreeStructure->Nodes.Num(); i++)
 	{
@@ -525,17 +521,11 @@ void UTreeGenerator::Subdivide(UTreeStructureDataAsset* TreeStructure)
 	TreeStructure->Edges = NewBranches;
 }
 
-void UTreeGenerator::RelocateNodes(UTreeStructureDataAsset* TreeStructure)
+TMap<int, TArray<int>> TreeGenerator::GetNodesSplitByChildren() const
 {
-	TArray<FVector> OriginalPositions;
-	for (const auto& Node : TreeStructure->Nodes)
-		OriginalPositions.Add(Node.Position);
-
-	for (int i = 1; i < TreeStructure->Nodes.Num(); i++)
-	{
-		int Parent = TreeStructure->Nodes[i].ParentIndex;
-		TreeStructure->Nodes[i].Position = OriginalPositions[Parent] + 0.5 * (OriginalPositions[i] - OriginalPositions[Parent]);
-	}
+	TMap<int, TArray<int>> Children;
+	for (const auto& Edge : TreeStructure->Edges)
+		Children.FindOrAdd(Edge.NodeStart).Add(Edge.NodeEnd);
+	
+	return Children;
 }
-
-

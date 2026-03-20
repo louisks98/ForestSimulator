@@ -1,33 +1,30 @@
 #pragma once
 
-#include "CoreMinimal.h"
-#include "Kismet/BlueprintFunctionLibrary.h"
-#include "TreeGenerator.generated.h"
+#include "TreePropertiesDataAsset.h"
+#include "TreeStructureDataAsset.h"
 
-struct FBud;
-class UTreePropertiesDataAsset;
-class USkeletalMesh;
-class UTreeStructureDataAsset;
-
-UCLASS()
-class FORESTSIMULATOR_API UTreeGenerator : public UBlueprintFunctionLibrary
+class TreeGenerator
 {
-	GENERATED_BODY()
-
 public:
+	TreeGenerator(UTreePropertiesDataAsset* TreePropertiesData, UTreeStructureDataAsset* TreeStructureData);
 	
-	UFUNCTION(BlueprintCallable)
-	static void GenerateTreeStructure(UTreePropertiesDataAsset* TreePropertiesData, UTreeStructureDataAsset* TreeStructureData);
-
+	UTreeStructureDataAsset* GenerateTreeStructure();
 private:
-	static void GenerateStructure(FRandomStream& RandomStream, UTreePropertiesDataAsset* TreeData, UTreeStructureDataAsset* TreeStructure);
-	static void GenerateNodes(int Iterations, UTreePropertiesDataAsset* TreeData, UTreeStructureDataAsset* TreeStructure, TArray<FVector>& AttractionPoints, TArray<FBud>& Buds);
-	static void GenerateAttractionPoints(FRandomStream& RandomStream, UTreePropertiesDataAsset* TreeData, TArray<FVector>& AttractionPoints);
-
-	static float DoBasipetalPass(UTreeStructureDataAsset* TreeStructure, TArray<FBud>& Buds, TMap<int, TArray<FVector>>& AttractionPointsPerBud, TMap<int, TPair<float, float>>& OutQSplit);
-	static void DoAcropetalPass(float QBase, UTreePropertiesDataAsset* TreeData, UTreeStructureDataAsset* TreeStructure, TArray<FBud>& Buds, TMap<int, TPair<float, float>>& QSplit);
-	static void ComputeRadii(UTreePropertiesDataAsset* TreeData, UTreeStructureDataAsset* TreeStructure);
-	static void DecimateNodes(UTreeStructureDataAsset* TreeStructure);
-	static void Subdivide(UTreeStructureDataAsset* TreeStructure);
-	static void RelocateNodes(UTreeStructureDataAsset* TreeStructure);
+	UTreePropertiesDataAsset* TreeProperties;
+	UTreeStructureDataAsset* TreeStructure;
+	FRandomStream RandomStream;
+	TArray<FVector> AttractionPoints;
+	
+	void GenerateAttractionPoints();
+	TArray<FBud> InitializeTrunk() const;
+	void GenerateNodes(int Iteration, TArray<FBud>& Buds);
+	float ComputeLightExposure(TArray<FBud>& Buds, const TMap<int, TArray<FVector>>& AttractionPointsPerBud, 
+								TMap<int, TPair<float, float>>& OutQSplit);
+	void DistributeVigor(float QBase, TArray<FBud>& Buds, TMap<int, TPair<float, float>>& QSplit);
+	void ComputeRadii();
+	void DecimateNodes();
+	void RelocateNodesTowardsParent() const;
+	void Subdivide() const;
+	
+	TMap<int, TArray<int>> GetNodesSplitByChildren() const;
 };
