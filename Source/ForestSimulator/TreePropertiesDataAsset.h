@@ -6,11 +6,10 @@
 UENUM(BlueprintType)
 enum class ETreeShape : uint8
 {
-	Sphere,
-	HalfSphere,
 	Cone,
 	Cylinder,
-	Cube
+	HalfSphere,
+	Sphere,
 };
 
 UENUM(BlueprintType)

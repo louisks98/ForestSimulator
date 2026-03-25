@@ -16,6 +16,9 @@ private:
 	TArray<FVector> AttractionPoints;
 	
 	void GenerateAttractionPoints();
+	void SeedPointsInSphere();
+	void SeedPointsInCylinder();
+	void SeedPointsInCone();
 	TArray<FBud> InitializeTrunk() const;
 	void GenerateNodes(int Iteration, TArray<FBud>& Buds);
 	float ComputeLightExposure(TArray<FBud>& Buds, const TMap<int, TArray<FVector>>& AttractionPointsPerBud, 

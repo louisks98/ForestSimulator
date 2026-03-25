@@ -30,9 +30,28 @@ UTreeStructureDataAsset* TreeGenerator::GenerateTreeStructure()
 
 void TreeGenerator::GenerateAttractionPoints()
 {
+	switch (TreeProperties->TreeShape)
+	{
+		case ETreeShape::Sphere:
+		case ETreeShape::HalfSphere:
+			SeedPointsInSphere();
+			break;
+		case ETreeShape::Cylinder:
+			SeedPointsInCylinder();
+			break;
+		case ETreeShape::Cone:
+			SeedPointsInCone();
+			break;
+		default:
+			break;
+	}
+}
+
+void TreeGenerator::SeedPointsInSphere()
+{
+	const float TrunkHeight = TreeProperties->TrunkHeight - TreeProperties->TrunkHeight / TreeProperties->TrunkSegments;
 	for (int i = 0; i < TreeProperties->NbAttractionPoints; i++)
 	{
-		const float TrunkHeight = TreeProperties->TrunkHeight - TreeProperties->TrunkHeight / TreeProperties->TrunkSegments;
 		const float u = RandomStream.FRand();
 		const float v = RandomStream.FRand();
 		
@@ -62,6 +81,45 @@ void TreeGenerator::GenerateAttractionPoints()
 	}
 }
 
+void TreeGenerator::SeedPointsInCylinder()
+{
+	const float TrunkHeight = TreeProperties->TrunkHeight - TreeProperties->TrunkHeight / 2;
+	float CrownHeight = TreeProperties->TrunkHeight * 2.0f;
+	for (int i = 0; i < TreeProperties->NbAttractionPoints; i++)
+	{
+		const float Theta = RandomStream.FRandRange(0, 2 * PI);
+		const float Radius =  TreeProperties->CrownSize * pow(RandomStream.FRand(), 1.0f/2.0f);
+
+		const float x = Radius * cos(Theta);
+		const float y = Radius * sin(Theta);
+		const float z = RandomStream.FRandRange(0, CrownHeight);
+		FVector Point{x, y , z + TrunkHeight};
+		AttractionPoints.Add(Point);
+	}
+}
+
+void TreeGenerator::SeedPointsInCone()
+{
+	const float TrunkHeight = TreeProperties->TrunkHeight - TreeProperties->TrunkHeight / 2;
+	const float CrownHeight = TreeProperties->TrunkHeight * 2.0f;
+	for (int i = 0; i < TreeProperties->NbAttractionPoints; i++)
+	{
+		const float u1 = RandomStream.FRand();
+		const float u2 = RandomStream.FRand();
+		const float u3 = RandomStream.FRand();
+		
+		const float Theta = 2 * PI * u1;
+		const float z = CrownHeight * u2;
+		const float Radius =  TreeProperties->CrownSize * pow(u3, 1.0f / 2.0f) * (1.0f - z / CrownHeight);
+		
+		const float x = Radius * cos(Theta);
+		const float y = Radius * sin(Theta);
+		
+		FVector Point{x, y , z + TrunkHeight};
+		AttractionPoints.Add(Point);
+	}
+}
+
 TArray<FBud> TreeGenerator::InitializeTrunk() const
 {
 	FTreeNode RootNode = FTreeNode();
@@ -83,9 +141,12 @@ TArray<FBud> TreeGenerator::InitializeTrunk() const
 		TreeStructure->Nodes.Add(TrunkNode);
 		TreeStructure->Edges.Add(BranchEdge);
 
-		FBud TrunkBud{RootNode};
-		TrunkBud.BudIndex = TreeStructure->Nodes.Num() - 1;
-		Buds.Add(TrunkBud);
+		if (i >= TreeProperties->TrunkSegments / 2)
+		{
+			FBud TrunkBud{RootNode};
+			TrunkBud.BudIndex = TreeStructure->Nodes.Num() - 1;
+			Buds.Add(TrunkBud);
+		}
 		
 		RootNode = TrunkNode;
 		Direction *= -1;
