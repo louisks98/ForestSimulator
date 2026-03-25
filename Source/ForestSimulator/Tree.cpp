@@ -17,10 +17,10 @@ void ATree::BeginPlay()
 
 	if (TreeData)
 	{
-		TreeNodes      = TreeData->Nodes;
-		BranchEdges    = TreeData->Edges;
-		BranchModules  = TreeData->Modules;
-		LeafInstances  = TreeData->Leaves;
+		TreeNodes = TreeData->Nodes;
+		BranchEdges = TreeData->Edges;
+		BranchModules = TreeData->Modules;
+		LeafInstances = TreeData->Leaves;
 		
 		UE_LOG(LogTemp, Log,
 		       TEXT("ATree '%s': loaded %d nodes, %d edges, %d modules, %d leaves."),
@@ -46,12 +46,6 @@ void ATree::BeginPlay()
 
 void ATree::DebugDrawTree()
 {
-	// for (int i = 0; i < TreeNodes.Num(); i++)
-	// {
-	// 	auto Node = TreeNodes[i];
-	// 	DrawDebugSphere(GetWorld(), Node.Position, 1.0f, 12, FColor::Blue, true, 1.0f);
-	// }
-	
 	TArray<int32> Indices = TArray<int32>();
 	FTransform WorldPosition = GetActorTransform();
 	for (int i = 0; i < BranchEdges.Num(); i++)
@@ -80,11 +74,76 @@ void ATree::DebugDrawTree()
 void ATree::BuildTreeMesh()
 {
 	double StartTime = FPlatformTime::Seconds();
+	TMap<int, TArray<int>> ChildrenOf;
+	for (const auto& Edge : BranchEdges)
+		ChildrenOf.FindOrAdd(Edge.NodeStart).Add(Edge.NodeEnd);
+	
+	TSet<int> BranchingNodes;
+	TSet<int> RenderedNodes;
+	for (int i = 0; i < TreeNodes.Num(); i++)
+	{
+		if (!ChildrenOf.Contains(i))
+			continue;
+		
+		if (ChildrenOf.Contains(i) && ChildrenOf[i].Num() > 1)
+		{
+			BranchingNodes.Add(i);
+			continue;
+		}
+		
+		int Parent = TreeNodes[i].ParentIndex;
+		if (Parent == INDEX_NONE)
+			BranchingNodes.Add(i);
+	}
+	
+	int MeshIndex = 0;
 	for (int i = 0; i < BranchEdges.Num(); i++)
 	{
-		FTreeNode Start = TreeNodes[BranchEdges[i].NodeStart];
-		FTreeNode End = TreeNodes[BranchEdges[i].NodeEnd];
-		BuildBranchMesh(i, Start, End);
+		int Start = BranchEdges[i].NodeStart;
+		int End = BranchEdges[i].NodeEnd;
+		
+		if (!BranchingNodes.Contains(Start))
+			continue;
+		
+		TArray<int> Chain;
+		if (!RenderedNodes.Contains(Start))
+			Chain.Add(Start);
+		
+		while (ChildrenOf.Contains(End))
+		{
+			if (!RenderedNodes.Contains(End))
+				Chain.Add(End);
+			
+			int Index = ChildrenOf[End][0];
+			if (BranchingNodes.Contains(End) && ChildrenOf[End].Num() > 1)
+			{
+				FQuat ParentOrientation = TreeNodes[End].Orientation;
+				FVector ParentForward = ParentOrientation.GetForwardVector();
+				float Deviation = -MAX_flt;
+				for (int j = 0; j < ChildrenOf[End].Num(); ++j)
+				{
+					FQuat ChildOrientation = TreeNodes[ChildrenOf[End][j]].Orientation;
+					FVector ChildForward = ChildOrientation.GetForwardVector();
+					
+					float Dot = ParentForward.Dot(ChildForward);
+					if (Dot > Deviation)
+					{
+						Index = ChildrenOf[End][j];
+						Deviation = Dot;
+					}
+				}
+			}
+			End = Index;
+		}
+		if (!RenderedNodes.Contains(End))
+			Chain.Add(End);
+		
+		if (Chain.Num() > 1)
+		{
+			BuildBranchMesh(MeshIndex, Chain);
+			RenderedNodes.Append(Chain);
+			MeshIndex++;
+		}
 	}
 	MeshComponent->UpdateBounds();
 
@@ -106,46 +165,70 @@ void ATree::BuildTreeMesh()
 	UE_LOG(LogTemp, Warning, TEXT("Tree mesh generation execution time: %f seconds."), ElapsedTime);
 }
 
-void ATree::BuildBranchMesh(int Index, FTreeNode Start, FTreeNode End) const
+void ATree::BuildBranchMesh(int Index, TArray<int>& Chain)
 {
 	TArray<int32> Indices = TArray<int32>();
-	TArray<FVector> Vertices = TArray<FVector>();
-	TArray<FVector> Normals = TArray<FVector>();
-	TArray<FVector2D> UVs = TArray<FVector2D>();
-	TArray<FColor> Colors = TArray<FColor>();
-	
-	int Resolution = FMath::Clamp(FMath::RoundToInt(Start.Radius), MinNumSides, MaxNumSides);
-	FVector BranchAxis = (Start.Position - End.Position).GetSafeNormal();
-	FVector Ref = FMath::Abs(FVector::DotProduct(BranchAxis, FVector::UpVector)) < 0.95f ? FVector::UpVector : FVector::ForwardVector;
-	FVector Right = FVector::CrossProduct(BranchAxis, Ref).GetSafeNormal();
-	FVector Forward = FVector::CrossProduct(Right, BranchAxis).GetSafeNormal();
-	
-	for (int i = 0; i < Resolution; ++i)
-	{
-		float Angle = i * (2 * PI / Resolution);
-		FVector StartOffset = cos(Angle) * Right + sin(Angle) * Forward;
-		Vertices.Add(Start.Position + StartOffset * Start.Radius);
-		Normals.Add(StartOffset);
-		UVs.Add(FVector2D(i / static_cast<float>(Resolution), 0.0f));
-		Colors.Add(FColor(0,0,0));
-	}
-	
-	for (int i = 0; i < Resolution; ++i)
-	{
-		float Angle = i * (2 * PI / Resolution);
-		FVector EndOffset = cos(Angle) * Right + sin(Angle) * Forward;
-		Vertices.Add(End.Position + EndOffset * End.Radius);
-		Normals.Add(EndOffset);
-		UVs.Add(FVector2D(i / static_cast<float>(Resolution), 1.0f));
-		Colors.Add(FColor(0,0,0));
-	}
 
-	for (int i = 0; i < Resolution; i++)
+	FTreeNode Start = TreeNodes[Chain[0]];
+	FTreeNode End = TreeNodes[Chain[1]];
+	FVector PrevAxis = (Start.Position - End.Position).GetSafeNormal();
+	FVector Ref = FMath::Abs(FVector::DotProduct(PrevAxis, FVector::UpVector)) < 0.95f ? FVector::UpVector : FVector::ForwardVector;
+	FVector PrevRight = FVector::CrossProduct(PrevAxis, Ref).GetSafeNormal();
+	FVector PrevForward = FVector::CrossProduct(PrevRight, PrevAxis).GetSafeNormal();
+	int Resolution = FMath::Clamp(FMath::RoundToInt(Start.Radius), MinNumSides, MaxNumSides);
+	
+	Vertices Vertices = ComputeVertices(Resolution, Chain[0], PrevRight, PrevForward, 0.0f);
+	Vertices.Append(ComputeVertices(Resolution, Chain[1], PrevRight, PrevForward, 1.0f));
+	Indices.Append(ComputeIndices(Resolution, 0));
+	
+	for (int i = 1; i < Chain.Num() - 1; i++)
 	{
-		int A = i;
-		int B = (i + 1) % Resolution;
-		int C = Resolution + i;
-		int D = Resolution + (i + 1) % Resolution;
+		Start = TreeNodes[Chain[i]];
+		End = TreeNodes[Chain[i + 1]];
+		FVector Axis = (Start.Position - End.Position).GetSafeNormal();
+		FQuat Rotation = FQuat::FindBetweenNormals(PrevAxis, Axis);
+		FVector Right = Rotation.RotateVector(PrevRight);
+		FVector Forward = Rotation.RotateVector(PrevForward);
+		
+		Vertices.Append(ComputeVertices(Resolution, Chain[i + 1], Right, Forward, 1.0f));
+		Indices.Append(ComputeIndices(Resolution, Vertices.Positions.Num() - 2 * Resolution));
+		
+		PrevRight = Right;
+		PrevForward = Forward;
+		PrevAxis = Axis;
+	}
+	
+	MeshComponent->CreateMeshSection(Index, Vertices.Positions, Indices, Vertices.Normals, Vertices.UVs, Vertices.Colors, TArray<FProcMeshTangent>{}, false);
+}
+
+Vertices ATree::ComputeVertices(int Resolution, int NodeIndex, FVector Right, FVector Forward, float UV_v)
+{
+	Vertices Vertices;
+	const FTreeNode Node = TreeNodes[NodeIndex];
+	for (int i = 0; i < Resolution; ++i)
+	{
+		const float Angle = i * (2 * PI / Resolution);
+		FVector Offset = cos(Angle) * Right + sin(Angle) * Forward;
+		const float Noise = FMath::PerlinNoise1D(NodeIndex + (i * 137.5f));
+		const float DeviatedRadius = Node.Radius * (1.0f + MeshNoiseStrength * Noise);
+		Vertices.Positions.Add(Node.Position + Offset * DeviatedRadius);
+		Vertices.Normals.Add(Offset);
+		Vertices.UVs.Add(FVector2D(i / static_cast<float>(Resolution), UV_v));
+		Vertices.Colors.Add(FColor(0,0,0));
+	}
+	
+	return Vertices;
+}
+
+TArray<int> ATree::ComputeIndices(int Resolution, int Offset)
+{
+	TArray<int> Indices;
+	for (int j = 0; j < Resolution; j++)
+	{
+		int A = Offset + j;
+		int B = Offset + (j + 1) % Resolution;
+		int C = Offset + Resolution + j;
+		int D = Offset + Resolution + (j + 1) % Resolution;
 
 		Indices.Add(A);
 		Indices.Add(C);
@@ -155,8 +238,8 @@ void ATree::BuildBranchMesh(int Index, FTreeNode Start, FTreeNode End) const
 		Indices.Add(D);
 		Indices.Add(B);
 	}
-
-	MeshComponent->CreateMeshSection(Index, Vertices, Indices, Normals, UVs, Colors, TArray<FProcMeshTangent>{}, false);
+	
+	return Indices;
 }
 
 void ATree::Tick(float DeltaTime)

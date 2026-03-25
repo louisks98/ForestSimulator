@@ -27,6 +27,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tree")
 	int MaxNumSides = 12;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tree")
+	float MeshNoiseStrength = 0.02f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tree")
 	UStaticMesh* LeafMesh; 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug")
 	bool Debug = false;
@@ -53,5 +55,7 @@ private:
 	
 	void DebugDrawTree();
 	void BuildTreeMesh();
-	void BuildBranchMesh(int Index, FTreeNode Start, FTreeNode End) const;
+	void BuildBranchMesh(int Index, TArray<int>& Chain);
+	Vertices ComputeVertices(int Resolution, int NodeIndex, FVector Right, FVector Forward, float UV_v);
+	TArray<int> ComputeIndices(int Resolution, int Offset);
 };

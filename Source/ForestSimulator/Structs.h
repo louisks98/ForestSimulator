@@ -124,3 +124,19 @@ struct FLeafInstance
 	UPROPERTY()
 	float Area = 1.f;
 };
+
+struct Vertices
+{
+	TArray<FVector> Positions = TArray<FVector>();
+	TArray<FVector> Normals = TArray<FVector>();
+	TArray<FVector2D> UVs = TArray<FVector2D>();
+	TArray<FColor> Colors = TArray<FColor>();
+	
+	void Append(const Vertices& V)
+	{
+		Positions.Append(V.Positions);
+		Normals.Append(V.Normals);
+		UVs.Append(V.UVs);
+		Colors.Append(V.Colors);
+	}
+};
