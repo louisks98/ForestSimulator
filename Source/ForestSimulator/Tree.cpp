@@ -15,12 +15,12 @@ void ATree::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (TreeData)
+	if (TreeStructure)
 	{
-		TreeNodes = TreeData->Nodes;
-		BranchEdges = TreeData->Edges;
-		BranchModules = TreeData->Modules;
-		LeafInstances = TreeData->Leaves;
+		TreeNodes = TreeStructure->Nodes;
+		BranchEdges = TreeStructure->Edges;
+		BranchModules = TreeStructure->Modules;
+		LeafInstances = TreeStructure->Leaves;
 		
 		UE_LOG(LogTemp, Log,
 		       TEXT("ATree '%s': loaded %d nodes, %d edges, %d modules, %d leaves."),

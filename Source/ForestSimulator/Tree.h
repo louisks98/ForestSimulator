@@ -21,7 +21,7 @@ public:
 	TArray<FLeafInstance> LeafInstances;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tree")
-	UTreeStructureDataAsset* TreeData = nullptr;
+	UTreeStructureDataAsset* TreeStructure = nullptr;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tree")
 	int MinNumSides = 5;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tree")
