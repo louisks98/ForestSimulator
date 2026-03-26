@@ -17,7 +17,7 @@ As input the "Fire in Paradise" research paper calls for input a tree in the for
 
 |Exemple 1|Exemple 2|
 |---------|---------|
-|![](Doc/Images/Exemple1.png)|![](Doc/Images/Exemple2.png)|
+|![](Images/Exemple1.png)|![](Images/Exemple2.png)|
 
 
 ### Improvements and Optimizations
@@ -33,26 +33,26 @@ If you want to create your own tree, follow these steps :
 
 1. Right-clicking the inside the content browser or clicking the `+ Add` button and create a new Data Asset
 
-![](Doc/Images/Tutorial1.png)
+![](Images/Tutorial1.png)
 
 2. Choose the class `Tree Properties Data Asset`.
 
-![](Doc/Images/Tutorial2.png)
+![](Images/Tutorial2.png)
 
 3. Create another Data Asset of class `Tree Structure Data Asset`
 4. Double click on the recently created `Tree Properties Data Asset`, change the tree properties and save the file.
 5. In the tools menu, open the "Generate Tree Structure" editor widget. 
 
-![](Doc/Images/Tutorial3.png)
+![](Images/Tutorial3.png)
 
 6. In the windows select your `Tree Properties Data Asset` and `Tree Structure Data Asset` then click the "Generate" button. The editor may freeze while the generation is ongoing depending on the number of attraction points set in the parameters. ~2000 points takes around 20 to 30 seconds.
 7. Create a new blueprint of class `ATree`.
 
-![](Doc/Images/Tutorial4.png)
+![](Images/Tutorial4.png)
 
 8. Open the blueprint by double clicking, then in the details panel select your recently created `Tree Structure Data Asset` in the `Tree Structure` property. Compile and save the blueprint. 
 
-![](Doc/Images/Tutorial5.png)
+![](Images/Tutorial5.png)
 
 9. Add your new blueprint to the level and press play.
 
