@@ -14,6 +14,7 @@ private:
 	UTreeStructureDataAsset* TreeStructure;
 	FRandomStream RandomStream;
 	TArray<FVector> AttractionPoints;
+	TMap<int, float> NodesLifeTimeLightAccumulation;
 	
 	void GenerateAttractionPoints();
 	void SeedPointsInSphere();
@@ -28,6 +29,7 @@ private:
 	void DecimateNodes();
 	void RelocateNodesTowardsParent() const;
 	void Subdivide() const;
+	void BranchShedding();
 	
 	TMap<int, TArray<int>> GetNodesSplitByChildren() const;
 };

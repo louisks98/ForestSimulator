@@ -61,6 +61,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
 	float TropismWeight;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
+	float SheddingThreshold = 0.5f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
 	int32 MaxIteration;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tree Properties")
 	int32 Subdivisions = 1;

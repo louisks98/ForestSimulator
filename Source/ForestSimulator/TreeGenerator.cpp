@@ -18,6 +18,7 @@ UTreeStructureDataAsset* TreeGenerator::GenerateTreeStructure()
 	GenerateAttractionPoints();
 	TArray<FBud> Buds = InitializeTrunk();
 	GenerateNodes(0, Buds);
+	BranchShedding();
 	DecimateNodes();
 	RelocateNodesTowardsParent();
 	ComputeRadii();
@@ -293,9 +294,14 @@ float TreeGenerator::ComputeLightExposure(TArray<FBud>& Buds, const TMap<int, TA
 	{
 		FBud Bud = Buds[i];
 		if (AttractionPointsPerBud.Contains(i))
+		{
 			QValues.FindOrAdd(Bud.BudIndex) += 1.0f;
+			NodesLifeTimeLightAccumulation.FindOrAdd(Bud.BudIndex) += 1.0f;
+		}
 		else
+		{
 			QValues.FindOrAdd(Bud.BudIndex) = 0.0f;
+		}
 	}
 
 	TMap<int, TPair<float, float>> QSplit;
@@ -584,6 +590,107 @@ void TreeGenerator::Subdivide() const
 
 	TreeStructure->Nodes = NewNodes;
 	TreeStructure->Edges = NewBranches;
+}
+
+void TreeGenerator::BranchShedding()
+{
+	TMap<int, TArray<int>> ChildrenOf = GetNodesSplitByChildren();
+	
+	for (int i = TreeStructure->Nodes.Num() - 1; i >= 0; i--)
+	{
+		if (!ChildrenOf.Contains(i))
+			continue;
+
+		float LightAccumulation = 0.0f;
+		for (int Child : ChildrenOf[i])
+			LightAccumulation += NodesLifeTimeLightAccumulation.FindOrAdd(Child);
+		NodesLifeTimeLightAccumulation.FindOrAdd(i) += LightAccumulation;
+	}
+
+	TSet<int> TipAndBranchingNodes;
+	for (int i = 0; i < TreeStructure->Nodes.Num(); i++)
+	{
+		if (!ChildrenOf.Contains(i) || ChildrenOf[i].Num() > 1)
+		{
+			TipAndBranchingNodes.Add(i);
+			continue;
+		}
+
+		if (TreeStructure->Nodes[i].ParentIndex == INDEX_NONE)
+			TipAndBranchingNodes.Add(i);
+	}
+
+	TSet<TPair<int, int>> EdgesToRemove;
+	for (const auto& Edge : TreeStructure->Edges)
+	{
+		int Start = Edge.NodeStart;
+		int End = Edge.NodeEnd;
+
+		if (!TipAndBranchingNodes.Contains(Start))
+			continue;
+
+		TArray<int> Chain;
+		Chain.Add(Start);
+		while (!TipAndBranchingNodes.Contains(End) && ChildrenOf.Contains(End) && ChildrenOf[End].Num() == 1)
+		{
+			Chain.Add(End);
+			End = ChildrenOf[End][0];
+		}
+		Chain.Add(End);
+		
+		if (ChildrenOf.Contains(Chain.Last()))
+			continue;
+
+		const int NbEdges = Chain.Num() - 1;
+		const float LightPerEdge = NodesLifeTimeLightAccumulation.FindOrAdd(Chain[1]) / NbEdges;
+
+		if (LightPerEdge < TreeProperties->SheddingThreshold)
+		{
+			for (int i = 0; i < Chain.Num() - 1; ++i)
+				EdgesToRemove.Add(TPair<int, int>(Chain[i], Chain[i + 1]));
+		}
+	}
+
+	TreeStructure->Edges = TreeStructure->Edges.FilterByPredicate([&EdgesToRemove](const FBranchEdge& E)
+	{
+		return !EdgesToRemove.Contains(TPair<int, int>(E.NodeStart, E.NodeEnd));
+	});
+	
+	
+	TSet<int> LiveNodes;
+	LiveNodes.Add(0);
+	for (const FBranchEdge& E : TreeStructure->Edges)
+	{
+		LiveNodes.Add(E.NodeStart);
+		LiveNodes.Add(E.NodeEnd);
+	}
+
+	TMap<int, int> RemappedIndices;
+	TArray<FTreeNode> NewNodes;
+	for (int i = 0; i < TreeStructure->Nodes.Num(); i++)
+	{
+		if (LiveNodes.Contains(i))
+		{
+			RemappedIndices.Add(i, NewNodes.Num());
+			NewNodes.Add(TreeStructure->Nodes[i]);
+		}
+	}
+
+	for (FTreeNode& Node : NewNodes)
+	{
+		if (Node.ParentIndex != INDEX_NONE && RemappedIndices.Contains(Node.ParentIndex))
+			Node.ParentIndex = RemappedIndices[Node.ParentIndex];
+		else
+			Node.ParentIndex = INDEX_NONE;
+	}
+
+	for (FBranchEdge& E : TreeStructure->Edges)
+	{
+		E.NodeStart = RemappedIndices[E.NodeStart];
+		E.NodeEnd = RemappedIndices[E.NodeEnd];
+	}
+
+	TreeStructure->Nodes = NewNodes;
 }
 
 TMap<int, TArray<int>> TreeGenerator::GetNodesSplitByChildren() const
