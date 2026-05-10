@@ -32,4 +32,7 @@ private:
 	void BranchShedding();
 	
 	TMap<int, TArray<int>> GetNodesSplitByChildren() const;
+	void RemapNodes(const TSet<int>& NodesToKeep, TArray<FTreeNode>& OutNodes, TMap<int, int>& OutRemappedIndices) const;
+	TArray<int> WalkChain(int Start, int End, const TSet<int>& Stops, const TMap<int, TArray<int>>& ChildrenOf) const;
+	TSet<int> CollectTipAndBranchingNodes(const TMap<int, TArray<int>>& ChildrenOf) const;
 };

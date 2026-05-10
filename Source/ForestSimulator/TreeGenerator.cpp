@@ -403,23 +403,14 @@ void TreeGenerator::ComputeRadii()
 void TreeGenerator::DecimateNodes()
 {
 	TMap<int, TArray<int>> ChildrenOf = GetNodesSplitByChildren();
-	TSet<int> ToKeep;
+	TSet<int> ToKeep = CollectTipAndBranchingNodes(ChildrenOf);
 	for (int i = 0; i < TreeStructure->Nodes.Num(); i++)
 	{
-		if (!ChildrenOf.Contains(i) || ChildrenOf[i].Num() > 1)
-		{
-			ToKeep.Add(i);
+		if (ToKeep.Contains(i))
 			continue;
-		}
-		
+
 		int Child = ChildrenOf[i][0];
 		int Parent = TreeStructure->Nodes[i].ParentIndex;
-		if (Parent == INDEX_NONE)
-		{
-			ToKeep.Add(i);
-			continue;
-		}
-
 		FVector Direction = TreeStructure->Nodes[i].Position - TreeStructure->Nodes[Parent].Position;
 		FVector ChildDirection = TreeStructure->Nodes[Child].Position - TreeStructure->Nodes[i].Position;
 		float Dot = FVector::DotProduct(Direction.GetSafeNormal(), ChildDirection.GetSafeNormal());
@@ -429,23 +420,13 @@ void TreeGenerator::DecimateNodes()
 
 	TMap<int, int> RemappedIndices;
 	TArray<FTreeNode> NewNodes;
-	for (int i = 0; i < TreeStructure->Nodes.Num(); i++)
-	{
-		if (ToKeep.Contains(i))
-		{
-			RemappedIndices.Add(i, NewNodes.Num());
-			NewNodes.Add(TreeStructure->Nodes[i]);
-		}
-	}
+	RemapNodes(ToKeep, NewNodes, RemappedIndices);
 
 	TArray<FBranchEdge> BranchEdges;
 	for (const auto& Edge : TreeStructure->Edges)
 	{
 		int Start = Edge.NodeStart;
-		int End = Edge.NodeEnd;
-
-		while (!ToKeep.Contains(End) && ChildrenOf.Contains(End) && ChildrenOf[End].Num() == 1)
-			End = ChildrenOf[End][0];
+		int End = WalkChain(Edge.NodeStart, Edge.NodeEnd, ToKeep, ChildrenOf).Last();
 
 		if (ToKeep.Contains(Start) && ToKeep.Contains(End))
 		{
@@ -481,29 +462,10 @@ void TreeGenerator::RelocateNodesTowardsParent() const
 void TreeGenerator::Subdivide() const
 {
 	TMap<int, TArray<int>> ChildrenOf = GetNodesSplitByChildren();
-	TSet<int> ToKeep;
-	for (int i = 0; i < TreeStructure->Nodes.Num(); i++)
-	{
-		if (!ChildrenOf.Contains(i) || ChildrenOf[i].Num() > 1)
-		{
-			ToKeep.Add(i);
-			continue;
-		}
-		
-		int Parent = TreeStructure->Nodes[i].ParentIndex;
-		if (Parent == INDEX_NONE)
-			ToKeep.Add(i);
-	}
+	TSet<int> ToKeep = CollectTipAndBranchingNodes(ChildrenOf);
 	TMap<int, int> RemappedIndices;
 	TArray<FTreeNode> NewNodes;
-	for (int i = 0; i < TreeStructure->Nodes.Num(); i++)
-	{
-		if (ToKeep.Contains(i))
-		{
-			RemappedIndices.Add(i, NewNodes.Num());
-			NewNodes.Add(TreeStructure->Nodes[i]);
-		}
-	}
+	RemapNodes(ToKeep, NewNodes, RemappedIndices);
 
 	TArray<FBranchEdge> NewBranches;
 	for (const auto& Edge : TreeStructure->Edges)
@@ -514,14 +476,8 @@ void TreeGenerator::Subdivide() const
 		if (!ToKeep.Contains(Start))
 			continue;
 		
-		TArray<int> Chain;
-		Chain.Add(Start);
-		while (!ToKeep.Contains(End) && ChildrenOf.Contains(End) && ChildrenOf[End].Num() == 1)
-		{
-			Chain.Add(End);
-			End = ChildrenOf[End][0];
-		}
-		Chain.Add(End);
+		TArray<int> Chain = WalkChain(Start, End, ToKeep, ChildrenOf);
+		End = Chain.Last();
 
 		if (Chain.Num() < 2)
 		{
@@ -607,18 +563,7 @@ void TreeGenerator::BranchShedding()
 		NodesLifeTimeLightAccumulation.FindOrAdd(i) += LightAccumulation;
 	}
 
-	TSet<int> TipAndBranchingNodes;
-	for (int i = 0; i < TreeStructure->Nodes.Num(); i++)
-	{
-		if (!ChildrenOf.Contains(i) || ChildrenOf[i].Num() > 1)
-		{
-			TipAndBranchingNodes.Add(i);
-			continue;
-		}
-
-		if (TreeStructure->Nodes[i].ParentIndex == INDEX_NONE)
-			TipAndBranchingNodes.Add(i);
-	}
+	TSet<int> TipAndBranchingNodes = CollectTipAndBranchingNodes(ChildrenOf);
 
 	TSet<TPair<int, int>> EdgesToRemove;
 	for (const auto& Edge : TreeStructure->Edges)
@@ -629,15 +574,8 @@ void TreeGenerator::BranchShedding()
 		if (!TipAndBranchingNodes.Contains(Start))
 			continue;
 
-		TArray<int> Chain;
-		Chain.Add(Start);
-		while (!TipAndBranchingNodes.Contains(End) && ChildrenOf.Contains(End) && ChildrenOf[End].Num() == 1)
-		{
-			Chain.Add(End);
-			End = ChildrenOf[End][0];
-		}
-		Chain.Add(End);
-		
+		TArray<int> Chain = WalkChain(Start, End, TipAndBranchingNodes, ChildrenOf);
+
 		if (ChildrenOf.Contains(Chain.Last()))
 			continue;
 
@@ -667,14 +605,7 @@ void TreeGenerator::BranchShedding()
 
 	TMap<int, int> RemappedIndices;
 	TArray<FTreeNode> NewNodes;
-	for (int i = 0; i < TreeStructure->Nodes.Num(); i++)
-	{
-		if (LiveNodes.Contains(i))
-		{
-			RemappedIndices.Add(i, NewNodes.Num());
-			NewNodes.Add(TreeStructure->Nodes[i]);
-		}
-	}
+	RemapNodes(LiveNodes, NewNodes, RemappedIndices);
 
 	for (FTreeNode& Node : NewNodes)
 	{
@@ -691,6 +622,48 @@ void TreeGenerator::BranchShedding()
 	}
 
 	TreeStructure->Nodes = NewNodes;
+}
+
+TSet<int> TreeGenerator::CollectTipAndBranchingNodes(const TMap<int, TArray<int>>& ChildrenOf) const
+{
+	TSet<int> Result;
+	for (int i = 0; i < TreeStructure->Nodes.Num(); i++)
+	{
+		if (!ChildrenOf.Contains(i) || ChildrenOf[i].Num() > 1)
+		{
+			Result.Add(i);
+			continue;
+		}
+
+		if (TreeStructure->Nodes[i].ParentIndex == INDEX_NONE)
+			Result.Add(i);
+	}
+	return Result;
+}
+
+TArray<int> TreeGenerator::WalkChain(int Start, int End, const TSet<int>& Stops, const TMap<int, TArray<int>>& ChildrenOf) const
+{
+	TArray<int> Chain;
+	Chain.Add(Start);
+	while (!Stops.Contains(End) && ChildrenOf.Contains(End) && ChildrenOf[End].Num() == 1)
+	{
+		Chain.Add(End);
+		End = ChildrenOf[End][0];
+	}
+	Chain.Add(End);
+	return Chain;
+}
+
+void TreeGenerator::RemapNodes(const TSet<int>& NodesToKeep, TArray<FTreeNode>& OutNodes, TMap<int, int>& OutRemappedIndices) const
+{
+	for (int i = 0; i < TreeStructure->Nodes.Num(); i++)
+	{
+		if (NodesToKeep.Contains(i))
+		{
+			OutRemappedIndices.Add(i, OutNodes.Num());
+			OutNodes.Add(TreeStructure->Nodes[i]);
+		}
+	}
 }
 
 TMap<int, TArray<int>> TreeGenerator::GetNodesSplitByChildren() const
