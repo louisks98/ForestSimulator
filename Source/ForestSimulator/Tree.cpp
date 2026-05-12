@@ -9,6 +9,9 @@ ATree::ATree()
 	MeshComponent = CreateDefaultSubobject<UProceduralMeshComponent>("MeshComponent");
 	MeshComponent->bUseComplexAsSimpleCollision = false;
 	LeavesInstanceComponent = CreateDefaultSubobject<UInstancedStaticMeshComponent>("LeavesInstanceComponent");
+	
+	EdgeEndingAt = TMap<int32, int32>();
+	EdgesStartingAt = TMap<int32, TArray<int32>>();
 }
 
 void ATree::BeginPlay()
@@ -28,6 +31,25 @@ void ATree::BeginPlay()
 		       TreeNodes.Num(), BranchEdges.Num(),
 		       BranchModules.Num(), LeafInstances.Num());
 
+		for (int32 i = 0; i < BranchEdges.Num(); ++i)
+		{
+			EdgeEndingAt.Add(BranchEdges[i].NodeEnd, i);
+			EdgesStartingAt.FindOrAdd(BranchEdges[i].NodeStart).Add(i);
+		}
+
+		for (auto& Edge : BranchEdges)
+		{
+			Edge.Temperature = 18.0f;
+			Edge.WaterContent = 0.18f;
+			Edge.InitialArea = 2 * PI * TreeNodes[Edge.NodeStart].Radius * Edge.Length;
+			Edge.Area = Edge.InitialArea;
+			Edge.InitialThickness = TreeNodes[Edge.NodeStart].Radius;
+			Edge.Thickness = Edge.InitialThickness;
+			Edge.Mass = (Edge.InitialArea / 2) * Edge.InitialThickness * WoodProperties.Density;
+			Edge.CharInsulation = WoodProperties.MinimumValueCharring + (1 - WoodProperties.MinimumValueCharring);
+		}
+		
+		
 		if(LeafMesh)
 			LeavesInstanceComponent->SetStaticMesh(LeafMesh);
 
@@ -269,5 +291,28 @@ void ATree::Tick(float DeltaTime)
 			LeavesInstanceComponent->UpdateInstanceTransform(i, InstanceTransform, true, false);
 		}
 	}
+}
+
+FTreeNode* ATree::GetNode(int32 Index)
+{
+	return &TreeNodes[Index];
+}
+
+FBranchEdge* ATree::GetEdge(int Index)
+{
+	return &BranchEdges[Index];
+}
+
+FBranchEdge* ATree::GetParentEdge(int32 Index)
+{
+	return GetEdge(EdgeEndingAt[Index]);
+}
+
+TArray<FBranchEdge*> ATree::GetChildEdges(int32 Index)
+{
+	TArray<FBranchEdge*> Edges;
+	for (auto i : EdgesStartingAt[Index])
+		Edges.Add(GetEdge(i));
+	return Edges;
 }
 
