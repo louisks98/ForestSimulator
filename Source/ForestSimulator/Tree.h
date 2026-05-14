@@ -14,6 +14,12 @@ class FORESTSIMULATOR_API ATree : public AActor
 	GENERATED_BODY()
 	
 public:
+
+	TArray<FTreeNode> TreeNodes;
+	TArray<FBranchModule> BranchModules;
+	TArray<FBranchEdge> BranchEdges;
+	TArray<FLeafInstance> LeafInstances;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tree")
 	UTreeStructureDataAsset* TreeStructure = nullptr;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tree")
@@ -22,8 +28,6 @@ public:
 	int MaxNumSides = 12;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tree")
 	float MeshNoiseStrength = 0.02f;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tree")
-	FWoodProperties WoodProperties;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tree")
 	UStaticMesh* LeafMesh; 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug")
@@ -36,13 +40,6 @@ public:
 
 	ATree();
 	virtual void Tick(float DeltaTime) override;
-	
-	FTreeNode* GetNode(int32 Index);
-	
-	int EdgeCount() const { return BranchEdges.Num();};
-	FBranchEdge* GetEdge(int Index);
-	FBranchEdge* GetParentEdge(int32 Index);
-	TArray<FBranchEdge*> GetChildEdges(int32 Index);
 
 protected:
 	virtual void BeginPlay() override;
@@ -54,15 +51,6 @@ private:
 	UPROPERTY()
 	UInstancedStaticMeshComponent* LeavesInstanceComponent;
 
-	
-	TArray<FTreeNode> TreeNodes;
-	TArray<FBranchModule> BranchModules;
-	TArray<FBranchEdge> BranchEdges;
-	TArray<FLeafInstance> LeafInstances;
-	
-	TMap<int32, int32> EdgeEndingAt;
-	TMap<int32, TArray<int32>> EdgesStartingAt;
-	
 	TArray<FQuat> LeafRotations;
 	
 	void DebugDrawTree();

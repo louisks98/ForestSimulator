@@ -15,6 +15,8 @@ struct FTreeNode
 	FQuat Orientation = FQuat::Identity;
 	UPROPERTY()
 	float Radius = 1.f;
+	UPROPERTY()
+	float Stiffness = 1.f;
 
 	bool operator==(const FTreeNode& Other) const
 	{
@@ -23,6 +25,8 @@ struct FTreeNode
 		if (Orientation != Other.Orientation)
 			return false;
 		if (Radius != Other.Radius)
+			return false;
+		if (Stiffness != Other.Stiffness)
 			return false;
 
 		return true;
@@ -64,19 +68,11 @@ struct FBranchEdge
 	UPROPERTY()
 	float Mass = 0.f;
 	UPROPERTY()
-	float InitialThickness = 0.f;
-	UPROPERTY()
 	float Thickness = 0.f;
 	UPROPERTY()
 	float CharThickness = 0.f;
 	UPROPERTY()
-	float InitialArea = 0.f;
-	UPROPERTY()
-	float Area = 0.f;
-	UPROPERTY()
-	float CharInsulation = 0.f;
-	UPROPERTY()
-	float WaterContent = 0.5f;
+	float Moisture = 0.5f;
 
 	bool operator==(const FBranchEdge& Other) const
 	{
@@ -94,7 +90,7 @@ struct FBranchEdge
 			return false;
 		if (CharThickness != Other.CharThickness)
 			return false;
-		if (WaterContent != Other.WaterContent)
+		if (Moisture != Other.Moisture)
 			return false;
 		
 		return true;
@@ -127,31 +123,6 @@ struct FLeafInstance
 	float Mass = 1.f;
 	UPROPERTY()
 	float Area = 1.f;
-};
-
-USTRUCT(BlueprintType)
-struct FWoodProperties
-{
-	GENERATED_BODY()
-	
-	UPROPERTY()
-	float Density = 800.0f;
-	UPROPERTY()
-	float ContractionFactor = 0.5f;
-	UPROPERTY()
-	float MinimumValueCharring = 0.1f;
-	UPROPERTY()
-	float RateCharInsulation = 50.0f;
-	UPROPERTY() // value * 0.01f
-	float MassLossRate = 0.25f * 0.01f;
-	UPROPERTY()
-	float DryWoodCoefficient = 0.05;
-	UPROPERTY()
-	float WetWoodCoefficient = DryWoodCoefficient * 0.1f;
-	UPROPERTY()
-	float AmountOfSmokeFromBurning = 16.0;
-	UPROPERTY()
-	float TemperatureDiffusion = 0.00000002f;
 };
 
 struct Vertices
