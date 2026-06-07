@@ -8,6 +8,7 @@ ATree::ATree()
 	PrimaryActorTick.bCanEverTick = true;
 	MeshComponent = CreateDefaultSubobject<UProceduralMeshComponent>("MeshComponent");
 	MeshComponent->bUseComplexAsSimpleCollision = false;
+	MeshComponent->SetCollisionEnabled(ECollisionEnabled::Type::QueryAndPhysics);
 	LeavesInstanceComponent = CreateDefaultSubobject<UInstancedStaticMeshComponent>("LeavesInstanceComponent");
 	
 	EdgeEndingAt = TMap<int32, int32>();
@@ -39,6 +40,7 @@ void ATree::BeginPlay()
 
 		for (auto& Edge : BranchEdges)
 		{
+			Edge.Length = FVector::Distance(TreeNodes[Edge.NodeStart].Position, TreeNodes[Edge.NodeEnd].Position);
 			Edge.Temperature = 18.0f;
 			Edge.WaterContent = 0.18f;
 			Edge.InitialArea = 2 * PI * TreeNodes[Edge.NodeStart].Radius * Edge.Length;
@@ -46,7 +48,7 @@ void ATree::BeginPlay()
 			Edge.InitialThickness = TreeNodes[Edge.NodeStart].Radius;
 			Edge.Thickness = Edge.InitialThickness;
 			Edge.Mass = (Edge.InitialArea / 2) * Edge.InitialThickness * WoodProperties.Density;
-			Edge.CharInsulation = WoodProperties.MinimumValueCharring + (1 - WoodProperties.MinimumValueCharring);
+			Edge.CharInsulation = WoodProperties.MinimumValueCharring + (1 - WoodProperties.MinimumValueCharring);	
 		}
 		
 		
@@ -305,13 +307,21 @@ FBranchEdge* ATree::GetEdge(int Index)
 
 FBranchEdge* ATree::GetParentEdge(int32 Index)
 {
-	return GetEdge(EdgeEndingAt[Index]);
+	const FBranchEdge* Edge = GetEdge(Index);
+	if (EdgeEndingAt.Contains(Edge->NodeStart))
+		return GetEdge(EdgeEndingAt[Edge->NodeStart]);
+
+	return nullptr;
 }
 
 TArray<FBranchEdge*> ATree::GetChildEdges(int32 Index)
 {
 	TArray<FBranchEdge*> Edges;
-	for (auto i : EdgesStartingAt[Index])
+	const FBranchEdge* Edge = GetEdge(Index);
+	if (!EdgesStartingAt.Contains(Edge->NodeEnd))
+		return Edges;
+
+	for (auto i : EdgesStartingAt[Edge->NodeEnd])
 		Edges.Add(GetEdge(i));
 	return Edges;
 }

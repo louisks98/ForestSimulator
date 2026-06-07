@@ -32,6 +32,10 @@
 		{
 			"Name": "ImpostorBaker",
 			"Enabled": true
+		},
+		{
+			"Name": "NiagaraFluids",
+			"Enabled": true
 		}
 	]
 }

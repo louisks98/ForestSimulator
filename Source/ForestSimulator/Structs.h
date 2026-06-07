@@ -143,7 +143,7 @@ struct FWoodProperties
 	UPROPERTY()
 	float RateCharInsulation = 50.0f;
 	UPROPERTY() // value * 0.01f
-	float MassLossRate = 0.25f * 0.01f;
+	float MaxMassLossRateCoefficient = 0.25f * 0.01f;
 	UPROPERTY()
 	float DryWoodCoefficient = 0.05;
 	UPROPERTY()
